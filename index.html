@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a68ff">
+<meta http-equiv="Cache-Control" content="no-cache">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Scanner">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Seriennummer-Scanner</title>
+<style>
+  :root{
+    --bg:#f2f2f7; --card:#ffffff; --text:#1c1c1e; --muted:#8a8a8e;
+    --line:#e5e5ea; --field:#f7f7f9; --blue:#0a68ff; --green:#1eaa50;
+    --red:#e0322b; --amber:#c26a00; --chip:#eef2f9;
+    --shadow:0 1px 3px rgba(0,0,0,.06),0 6px 20px rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#000000; --card:#1c1c1e; --text:#f2f2f7; --muted:#98989f;
+      --line:#2c2c2e; --field:#2c2c2e; --blue:#4c9aff; --green:#32d074;
+      --red:#ff6961; --amber:#f0a33a; --chip:#2c2c2e;
+      --shadow:0 1px 3px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#000000; --card:#1c1c1e; --text:#f2f2f7; --muted:#98989f;
+    --line:#2c2c2e; --field:#2c2c2e; --blue:#4c9aff; --green:#32d074;
+    --red:#ff6961; --amber:#f0a33a; --chip:#2c2c2e;
+    --shadow:0 1px 3px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  [hidden]{display:none!important}
+  body{
+    margin:0 auto;padding:14px 14px 40px;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+    font-size:15px;line-height:1.45;max-width:680px;
+  }
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 0 12px}
+  .htitle{flex:1;min-width:0}
+  h1{font-size:19px;font-weight:700;margin:0;letter-spacing:-.3px;white-space:nowrap}
+  .sub{font-size:12px;color:var(--muted);margin:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  @media (max-width:380px){ h1{font-size:17px} .sub{font-size:11px} }
+  .lang{display:flex;background:var(--chip);border-radius:10px;padding:2px;flex:0 0 auto}
+  .lang button{border:none;background:transparent;color:var(--muted);font-weight:700;font-size:12px;
+    padding:6px 10px;border-radius:8px;cursor:pointer;letter-spacing:.3px}
+  .lang button.on{background:var(--card);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+
+  .card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:13px;box-shadow:var(--shadow)}
+  label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:0 0 5px}
+  input,select{width:100%;padding:11px 12px;font-size:16px;color:var(--text);
+    background:var(--field);border:1px solid var(--line);border-radius:11px;font-family:inherit}
+  :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  .row{display:flex;gap:9px;align-items:flex-end}
+  .row>div{flex:1;min-width:0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  button.b{border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:700;color:#fff;cursor:pointer;width:100%}
+  button.b:active{opacity:.75}
+  .b-blue{background:var(--blue)}
+  .b-green{background:var(--green)}
+  button.b-ghost{background:var(--chip);color:var(--text)}
+  button.b-red{background:var(--red)}
+  button:disabled{opacity:.45;cursor:default}
+  .big{font-size:17px;padding:17px}
+
+  .seg{display:flex;background:var(--chip);border-radius:11px;padding:3px;gap:2px}
+  .seg button{flex:1;border:none;background:transparent;color:var(--muted);font-weight:700;
+    font-size:13px;padding:9px 4px;border-radius:9px;cursor:pointer;white-space:nowrap}
+  .seg button.on{background:var(--card);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+
+  .stat{display:flex;gap:9px;margin-bottom:13px}
+  .stat div{flex:1;background:var(--card);border-radius:14px;padding:11px;text-align:center;box-shadow:var(--shadow)}
+  .stat .k{font-size:11px;color:var(--muted);font-weight:700}
+  .stat .v{font-size:21px;font-weight:800;color:var(--blue);font-variant-numeric:tabular-nums}
+
+  .item{display:flex;align-items:center;gap:11px;padding:11px 12px;background:var(--card);
+    border-radius:13px;margin-bottom:7px;box-shadow:var(--shadow)}
+  .item .no{flex:0 0 auto;min-width:26px;text-align:right;font-size:12px;color:var(--muted);
+    font-weight:800;font-variant-numeric:tabular-nums}
+  .item .t{flex:1;min-width:0}
+  .item .sn{font-weight:700;font-size:15px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    word-break:break-all;letter-spacing:.2px}
+  .item .meta{font-size:11px;color:var(--muted);margin-top:2px}
+  .item .meta b{color:var(--amber);font-weight:700}
+  .item .x{flex:0 0 auto;background:none;border:none;color:var(--muted);font-size:17px;cursor:pointer;padding:3px 5px}
+  .item.dup{border:1px solid var(--amber)}
+  .empty{text-align:center;color:var(--muted);font-size:13px;padding:22px 10px}
+  .note{font-size:11.5px;color:var(--muted);margin:8px 2px 0;line-height:1.55}
+
+  /* ---------- scanner overlay ---------- */
+  .scan{position:fixed;inset:0;background:#000;z-index:80;display:flex;flex-direction:column}
+  .scan video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+  .mask{position:absolute;inset:0;pointer-events:none}
+  .mask .dim{position:absolute;left:0;right:0;background:rgba(0,0,0,.62)}
+  .win{position:absolute;left:6%;right:6%;border:2px solid rgba(255,255,255,.9);border-radius:10px;
+    box-shadow:0 0 0 100vmax rgba(0,0,0,.001)}
+  .win i{position:absolute;left:8px;right:8px;top:50%;height:2px;background:var(--red);
+    box-shadow:0 0 8px rgba(224,50,43,.9);transform:translateY(-1px)}
+  .scan .bar{position:relative;z-index:2;display:flex;align-items:center;gap:9px;
+    padding:calc(10px + env(safe-area-inset-top)) 12px 10px}
+  .scan .bar .sp{flex:1}
+  .icb{background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.25);color:#fff;
+    border-radius:11px;padding:9px 12px;font-size:14px;font-weight:700;cursor:pointer}
+  .icb.on{background:#fff;color:#000}
+  .scan .foot{position:relative;z-index:2;margin-top:auto;
+    padding:12px 14px calc(14px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.75) 30%)}
+  .scan .hint{color:#fff;font-size:13px;text-align:center;margin:0 0 10px;text-shadow:0 1px 3px #000}
+  .scan .last{color:#7dffa8;font-size:15px;font-weight:800;text-align:center;margin:0 0 10px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;min-height:20px;text-shadow:0 1px 3px #000}
+  .scan .cnt{color:#fff;font-size:12px;text-align:center;margin:0 0 10px;opacity:.85}
+  .zoomrow{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+  .zoomrow span{color:#fff;font-size:12px;font-weight:700;opacity:.85}
+  .zoomrow input[type=range]{flex:1;width:auto;padding:0;background:transparent;border:none}
+  .dupbox{position:relative;z-index:3;margin:0 14px 11px;background:var(--amber);color:#fff;
+    border-radius:13px;padding:12px;font-size:13.5px;font-weight:700}
+  .dupbox .g{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+  .dupbox button{border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:800;cursor:pointer}
+  .dupbox .yes{background:#fff;color:var(--amber)}
+  .dupbox .no{background:rgba(0,0,0,.28);color:#fff}
+
+  .updbar{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:var(--blue);color:#fff;border-radius:12px;padding:10px 12px;margin-bottom:12px;
+    font-size:12.5px;font-weight:700}
+  .updbar b{font-variant-numeric:tabular-nums}
+  .updbar button{flex:0 0 auto;background:#fff;color:var(--blue);border:none;border-radius:9px;
+    padding:8px 13px;font-size:12.5px;font-weight:800;cursor:pointer}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+    background:#111;color:#fff;padding:11px 17px;border-radius:12px;font-size:13.5px;font-weight:600;
+    opacity:0;pointer-events:none;transition:.22s;z-index:200;max-width:88vw;text-align:center}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  .verbox{text-align:center;margin-top:12px}
+  .verbox span{display:inline-block;background:var(--chip);color:var(--text);border-radius:999px;
+    padding:5px 13px;font-size:11.5px;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .tiny{font-size:11.5px;color:var(--muted);text-align:center;line-height:1.6;margin:14px 0 0}
+  details.card summary{font-weight:700;font-size:14px;cursor:pointer;list-style:none}
+  details.card summary::-webkit-details-marker{display:none}
+  details.card summary:before{content:"▸ ";color:var(--muted)}
+  details.card[open] summary:before{content:"▾ "}
+</style>
+</head>
+<body>
+<div class="updbar" id="updBar" hidden>
+  <span><span data-i18n="upd.msg"></span> <b id="updVer"></b></span>
+  <button data-i18n="upd.btn" onclick="doUpdate()"></button>
+</div>
+
+<header>
+  <div class="htitle">
+    <h1 data-i18n="app.title"></h1>
+    <p class="sub" data-i18n="app.sub"></p>
+  </div>
+  <div class="lang">
+    <button id="langKo" onclick="setLang('ko')">KO</button>
+    <button id="langDe" onclick="setLang('de')">DE</button>
+  </div>
+</header>
+
+<div class="stat">
+  <div><div class="k" data-i18n="st.total"></div><div class="v" id="stTotal">0</div></div>
+  <div><div class="k" data-i18n="st.today"></div><div class="v" id="stToday">0</div></div>
+  <div><div class="k" data-i18n="st.dup"></div><div class="v" id="stDup">0</div></div>
+</div>
+
+<button class="b b-blue big" id="btnScan" data-i18n="btn.scan" onclick="openScan()"></button>
+<p class="note" id="camNote" hidden></p>
+
+<div class="card" style="margin-top:13px">
+  <label data-i18n="f.manual"></label>
+  <div class="row">
+    <div><input id="manualIn" autocapitalize="characters" autocomplete="off" spellcheck="false"
+      data-i18n-ph="ph.manual" onkeydown="if(event.key==='Enter')addManual()"></div>
+    <button class="b b-ghost" style="flex:0 0 auto;width:auto;padding:11px 16px"
+      data-i18n="btn.add" onclick="addManual()"></button>
+  </div>
+  <p class="note" data-i18n="note.manual"></p>
+</div>
+
+<details class="card" id="setBox">
+  <summary data-i18n="set.title"></summary>
+
+  <div style="margin-top:12px">
+    <label data-i18n="set.trim"></label>
+    <div class="seg" id="segTrim"></div>
+    <p class="note" id="trimEx"></p>
+  </div>
+
+  <div style="margin-top:12px">
+    <label data-i18n="set.swap"></label>
+    <div class="seg" id="segSwap"></div>
+    <p class="note" data-i18n="note.swap"></p>
+  </div>
+
+  <div style="margin-top:12px">
+    <label data-i18n="set.dup"></label>
+    <div class="seg" id="segDup"></div>
+  </div>
+
+  <div style="margin-top:12px">
+    <label data-i18n="set.band"></label>
+    <div class="seg" id="segBand"></div>
+    <p class="note" data-i18n="note.band"></p>
+  </div>
+
+  <div style="margin-top:12px">
+    <label data-i18n="set.beep"></label>
+    <div class="seg" id="segBeep"></div>
+  </div>
+
+  <button class="b b-ghost" style="margin-top:13px" data-i18n="btn.reapply" onclick="reapply()"></button>
+  <p class="note" data-i18n="note.reapply"></p>
+</details>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin:4px 2px 9px">
+  <label style="margin:0" data-i18n="list.title"></label>
+  <span class="note" style="margin:0" id="listInfo"></span>
+</div>
+<div id="list"></div>
+
+<div class="grid2" style="margin-top:13px">
+  <button class="b b-green" data-i18n="btn.xlsx" onclick="exportXlsx()"></button>
+  <button class="b b-ghost" data-i18n="btn.csv" onclick="exportCsv()"></button>
+</div>
+<div class="grid2" style="margin-top:9px">
+  <button class="b b-ghost" data-i18n="btn.backup" onclick="backup()"></button>
+  <button class="b b-ghost" data-i18n="btn.restore" onclick="document.getElementById('fileIn').click()"></button>
+</div>
+<input type="file" id="fileIn" accept="application/json,.json" hidden onchange="restore(event)">
+<button class="b b-red" style="margin-top:9px" data-i18n="btn.clear" onclick="clearAll()"></button>
+
+<p class="tiny" id="footNote"></p>
+<div class="verbox"><span id="verLine"></span></div>
+
+<!-- ================= scanner ================= -->
+<div class="scan" id="scanView" hidden>
+  <video id="video" playsinline muted autoplay></video>
+  <div class="mask">
+    <div class="dim" id="dimTop"></div>
+    <div class="dim" id="dimBot"></div>
+    <div class="win" id="win"><i></i></div>
+  </div>
+
+  <div class="bar">
+    <button class="icb" data-i18n="btn.close" onclick="closeScan()"></button>
+    <div class="sp"></div>
+    <button class="icb" id="btnTorch" hidden onclick="toggleTorch()">🔦</button>
+  </div>
+
+  <div class="dupbox" id="dupBox" hidden>
+    <div id="dupMsg"></div>
+    <div class="g">
+      <button class="yes" data-i18n="dup.add" onclick="dupAnswer(true)"></button>
+      <button class="no" data-i18n="dup.skip" onclick="dupAnswer(false)"></button>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="zoomrow" id="zoomRow" hidden>
+      <span>🔍</span>
+      <input type="range" id="zoom" min="1" max="5" step="0.1" value="1" oninput="setZoom(this.value)">
+    </div>
+    <p class="last" id="lastHit"></p>
+    <p class="hint" id="scanHint"></p>
+    <p class="cnt" id="scanCnt"></p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+(function(){
+"use strict";
+
+var APP_VER="2026-09-09a";
+var K_LIST="sn_items_v1", K_SET="sn_settings_v1", K_LANG="sn_lang";
+var ZX_URL="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.2/+esm";
+var XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+/* 1D only: a serial-number sticker is never a QR code, and leaving the 2D
+   formats out keeps the decoder fast and stops it grabbing the wrong label */
+var FORMATS=["Code128","Code39","Code93","Codabar","EAN-13","EAN-8","UPC-A","UPC-E","ITF"];
+
+var S={ trim:0, swap:false, dup:"warn", band:0.16, beep:true };
+var items=[], lang="de";
+
+/* ===================== i18n ===================== */
+var STR={ko:{
+ "app.title":"일련번호 스캐너","app.sub":"바코드를 읽어 엑셀 목록으로",
+ "st.total":"전체","st.today":"오늘","st.dup":"중복",
+ "btn.scan":"📷 스캔 시작","btn.close":"✕ 닫기","btn.add":"추가",
+ "f.manual":"직접 입력","ph.manual":"일련번호를 입력하고 Enter",
+ "note.manual":"바코드가 지워졌거나 읽히지 않을 때 씁니다. 아래 변환 설정이 똑같이 적용됩니다.",
+ "set.title":"변환 · 스캔 설정",
+ "set.trim":"앞에서 제외할 글자 수","set.swap":"Z ↔ Y 바꾸기","set.dup":"같은 번호를 또 스캔하면",
+ "set.band":"스캔 창 높이","set.beep":"스캔 소리 · 진동",
+ "trim.0":"없음","trim.1":"1자","trim.2":"2자","trim.3":"3자",
+ "sw.on":"바꾸기","sw.off":"그대로",
+ "dup.warn":"물어보기","dup.skip":"자동 무시","dup.keep":"그냥 저장",
+ "band.s":"좁게","band.m":"보통","band.l":"넓게",
+ "on":"켜기","off":"끄기",
+ "note.swap":"독일식 키보드(QWERTZ)로 입력된 코드에서 Z와 Y가 뒤바뀌어 나올 때 켜세요. 대문자·소문자 모두 바뀝니다.",
+ "note.band":"창이 좁을수록 옆에 있는 다른 바코드를 잘못 읽지 않고, 인식도 빨라집니다.",
+ "note.reapply":"설정을 바꾼 뒤 누르면, 이미 저장된 항목에도 원본부터 다시 적용합니다.",
+ "btn.reapply":"목록 전체에 다시 적용",
+ "trimEx":"예: {0} → {1}",
+ "list.title":"스캔 목록","list.empty":"아직 스캔한 번호가 없습니다",
+ "btn.xlsx":"엑셀 (.xlsx)","btn.csv":"CSV","btn.backup":"백업(JSON)","btn.restore":"백업 불러오기",
+ "btn.clear":"전체 삭제",
+ "scan.hint":"바코드를 창 안에 가로로 맞추세요","scan.starting":"카메라를 켜는 중…",
+ "scan.loading":"인식 엔진을 불러오는 중…",
+ "scan.cnt":"이번에 {0}개 스캔",
+ "dup.msg":"이미 목록에 있습니다 — {0}","dup.add":"그래도 추가","dup.skip2":"무시",
+ "t.added":"저장 · {0}","t.skipped":"중복이라 건너뜀","t.deleted":"삭제했습니다",
+ "t.needText":"번호를 입력하세요","t.reapplied":"{0}개 항목을 다시 계산했습니다",
+ "t.exported":"내보냈습니다","t.backupDone":"백업 파일을 저장했습니다","t.restored":"{0}개를 불러왔습니다",
+ "t.badFile":"파일을 읽을 수 없습니다","t.cleared":"모두 삭제했습니다","t.noData":"내보낼 항목이 없습니다",
+ "t.libErr":"인식 엔진을 불러오지 못했습니다 (인터넷 확인)",
+ "t.xlsxErr":"엑셀 모듈을 불러오지 못했습니다 (인터넷 확인)",
+ "c.delete":"이 항목을 삭제할까요?\n{0}","c.clear":"저장된 {0}개를 모두 삭제할까요?\n되돌릴 수 없습니다.",
+ "c.restore":"기존 목록에 추가할까요?\n[취소] 를 누르면 기존 목록을 덮어씁니다.",
+ "cam.denied":"카메라 권한이 거부되었습니다. 설정 → Safari → 카메라 에서 허용해 주세요.",
+ "cam.none":"이 기기에서 카메라를 열 수 없습니다. 직접 입력을 사용하세요.",
+ "cam.https":"카메라는 https 주소에서만 동작합니다.",
+ "orig":"원본 {0}",
+ "foot.note":"모든 데이터는 이 기기(브라우저) 안에만 저장됩니다.<br>Safari/Chrome에서 <b>홈 화면에 추가</b>하면 앱처럼 쓸 수 있습니다.<br>가끔 <b>백업(JSON)</b>을 받아두면 안전합니다.",
+ "ver.label":"앱 버전",
+ "upd.msg":"새 버전이 나왔습니다","upd.btn":"업데이트",
+ "xl.no":"번호","xl.sn":"일련번호","xl.date":"날짜","xl.time":"시간","xl.raw":"원본","xl.fmt":"코드 종류"
+},de:{
+ "app.title":"Seriennummer-Scanner","app.sub":"Barcodes scannen und als Excel-Liste",
+ "st.total":"Gesamt","st.today":"Heute","st.dup":"Doppelt",
+ "btn.scan":"📷 Scannen starten","btn.close":"✕ Schließen","btn.add":"Hinzufügen",
+ "f.manual":"Manuell eingeben","ph.manual":"Seriennummer eingeben, dann Enter",
+ "note.manual":"Für unlesbare oder fehlende Barcodes. Die Umwandlungen unten gelten genauso.",
+ "set.title":"Umwandlung · Scan-Einstellungen",
+ "set.trim":"Zeichen am Anfang entfernen","set.swap":"Z ↔ Y tauschen","set.dup":"Bei doppelter Nummer",
+ "set.band":"Höhe des Scanfensters","set.beep":"Ton · Vibration",
+ "trim.0":"keine","trim.1":"1","trim.2":"2","trim.3":"3",
+ "sw.on":"tauschen","sw.off":"unverändert",
+ "dup.warn":"nachfragen","dup.skip":"überspringen","dup.keep":"trotzdem speichern",
+ "band.s":"schmal","band.m":"mittel","band.l":"breit",
+ "on":"an","off":"aus",
+ "note.swap":"Einschalten, wenn Codes von einer QWERTZ-Tastatur mit vertauschtem Z und Y ankommen. Groß- und Kleinbuchstaben werden getauscht.",
+ "note.band":"Ein schmales Fenster erwischt keine Nachbar-Barcodes und wird schneller erkannt.",
+ "note.reapply":"Nach einer Änderung hier tippen — dann werden auch die gespeicherten Einträge neu aus dem Original berechnet.",
+ "btn.reapply":"Auf ganze Liste anwenden",
+ "trimEx":"z. B. {0} → {1}",
+ "list.title":"Gescannte Nummern","list.empty":"Noch nichts gescannt",
+ "btn.xlsx":"Excel (.xlsx)","btn.csv":"CSV","btn.backup":"Backup (JSON)","btn.restore":"Backup laden",
+ "btn.clear":"Alles löschen",
+ "scan.hint":"Barcode waagerecht ins Fenster legen","scan.starting":"Kamera wird gestartet…",
+ "scan.loading":"Erkennung wird geladen…",
+ "scan.cnt":"{0} in dieser Sitzung",
+ "dup.msg":"Steht schon in der Liste — {0}","dup.add":"Trotzdem","dup.skip2":"Überspringen",
+ "t.added":"Gespeichert · {0}","t.skipped":"Doppelt — übersprungen","t.deleted":"Gelöscht",
+ "t.needText":"Bitte eine Nummer eingeben","t.reapplied":"{0} Einträge neu berechnet",
+ "t.exported":"Exportiert","t.backupDone":"Backup gespeichert","t.restored":"{0} übernommen",
+ "t.badFile":"Datei nicht lesbar","t.cleared":"Alles gelöscht","t.noData":"Nichts zu exportieren",
+ "t.libErr":"Erkennung konnte nicht geladen werden (Internet prüfen)",
+ "t.xlsxErr":"Excel-Modul konnte nicht geladen werden (Internet prüfen)",
+ "c.delete":"Diesen Eintrag löschen?\n{0}","c.clear":"Alle {0} Einträge löschen?\nDas lässt sich nicht rückgängig machen.",
+ "c.restore":"Zur bestehenden Liste hinzufügen?\n[Abbrechen] ersetzt die Liste.",
+ "cam.denied":"Kamerazugriff wurde abgelehnt. Einstellungen → Safari → Kamera erlauben.",
+ "cam.none":"Die Kamera lässt sich auf diesem Gerät nicht öffnen. Bitte manuell eingeben.",
+ "cam.https":"Die Kamera funktioniert nur über eine https-Adresse.",
+ "orig":"Original {0}",
+ "foot.note":"Alle Daten bleiben ausschließlich auf diesem Gerät.<br>In Safari/Chrome über <b>Zum Home-Bildschirm</b> wie eine App nutzbar.<br>Ein gelegentliches <b>Backup (JSON)</b> schützt vor Verlust.",
+ "ver.label":"App-Version",
+ "upd.msg":"Neue Version verfügbar","upd.btn":"Aktualisieren",
+ "xl.no":"Nr.","xl.sn":"Seriennummer","xl.date":"Datum","xl.time":"Uhrzeit","xl.raw":"Original","xl.fmt":"Codeart"
+}};
+function t(k){
+  var s=(STR[lang]&&STR[lang][k])||(STR.de&&STR.de[k])||k, a=arguments;
+  return s.replace(/\{(\d+)\}/g,function(m,i){ var v=a[Number(i)+1]; return v===undefined?m:v; });
+}
+
+/* ===================== helpers ===================== */
+function lsGet(k,f){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):f; }catch(e){ return f; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function esc(s){ return String(s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+function two(n){ return n<10?"0"+n:String(n); }
+function dstr(ts){ var d=new Date(ts); return d.getFullYear()+"-"+two(d.getMonth()+1)+"-"+two(d.getDate()); }
+function tstr(ts){ var d=new Date(ts); return two(d.getHours())+":"+two(d.getMinutes())+":"+two(d.getSeconds()); }
+var toastT=null;
+function toast(m){
+  var el=document.getElementById("toast");
+  el.textContent=m; el.classList.add("on");
+  if(toastT) clearTimeout(toastT);
+  toastT=setTimeout(function(){ el.classList.remove("on"); },2200);
+}
+function download(name,text,mime){
+  var blob=(text instanceof Blob)?text:new Blob([text],{type:mime||"text/plain;charset=utf-8"});
+  var url=URL.createObjectURL(blob), a=document.createElement("a");
+  a.href=url; a.download=name;
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); },1500);
+  toast(t("t.exported"));
+}
+
+/* ===================== transforms ===================== */
+/* Z and Y sit swapped on a German keyboard, so a code typed through one comes
+   out with them exchanged; the trim drops a fixed prefix the labels carry. */
+function swapZY(s){
+  return String(s).replace(/[yYzZ]/g,function(c){
+    return c==="y"?"z":c==="z"?"y":c==="Y"?"Z":"Y";
+  });
+}
+function transform(raw){
+  var v=String(raw==null?"":raw);
+  if(S.swap) v=swapZY(v);
+  if(S.trim>0) v=v.slice(S.trim);
+  return v.trim();
+}
+
+/* ===================== list ===================== */
+function load(){
+  items=lsGet(K_LIST,[]);
+  var s=lsGet(K_SET,null);
+  if(s) for(var k in S) if(s[k]!==undefined) S[k]=s[k];
+}
+function save(){ lsSet(K_LIST,items); }
+function saveSet(){ lsSet(K_SET,S); }
+function isDup(v,skipId){
+  return items.some(function(x){ return x.value===v&&x.id!==skipId; });
+}
+function addItem(raw,fmt){
+  var v=transform(raw);
+  if(!v) return null;
+  var o={ id:uid(), raw:String(raw), value:v, ts:Date.now(), fmt:fmt||"" };
+  o.dup=isDup(v);
+  items.push(o); save(); render();
+  return o;
+}
+window.delItem=function(id){
+  var x=items.filter(function(y){ return y.id===id; })[0];
+  if(!x) return;
+  if(!confirm(t("c.delete",x.value))) return;
+  items=items.filter(function(y){ return y.id!==id; });
+  recheckDups(); save(); render(); toast(t("t.deleted"));
+};
+function recheckDups(){
+  var seen={};
+  items.forEach(function(x){
+    x.dup=!!seen[x.value];
+    seen[x.value]=1;
+  });
+}
+window.reapply=function(){
+  items.forEach(function(x){ x.value=transform(x.raw); });
+  recheckDups(); save(); render();
+  toast(t("t.reapplied",items.length));
+};
+window.addManual=function(){
+  var el=document.getElementById("manualIn");
+  var v=el.value.trim();
+  if(!v){ toast(t("t.needText")); return; }
+  var o=addItem(v,"manual");
+  el.value="";
+  if(o) toast(t("t.added",o.value));
+};
+function render(){
+  var box=document.getElementById("list");
+  if(!items.length){
+    box.innerHTML='<div class="empty">'+esc(t("list.empty"))+"</div>";
+  }else{
+    var rows=items.slice().reverse().map(function(x,i){
+      var n=items.length-i;
+      var meta=dstr(x.ts)+" "+tstr(x.ts);
+      if(x.raw!==x.value) meta+=" · "+t("orig",x.raw);
+      if(x.dup) meta+=" · <b>"+esc(t("st.dup"))+"</b>";
+      return '<div class="item'+(x.dup?" dup":"")+'">'+
+        '<div class="no">'+n+"</div>"+
+        '<div class="t"><div class="sn">'+esc(x.value)+"</div>"+
+        '<div class="meta">'+meta+"</div></div>"+
+        '<button class="x" data-id="'+esc(x.id)+'" aria-label="delete">✕</button></div>';
+    }).join("");
+    box.innerHTML=rows;
+    Array.prototype.forEach.call(box.querySelectorAll(".x"),function(b){
+      b.onclick=function(){ delItem(b.getAttribute("data-id")); };
+    });
+  }
+  var today=dstr(Date.now()), nToday=0, nDup=0;
+  items.forEach(function(x){ if(dstr(x.ts)===today) nToday++; if(x.dup) nDup++; });
+  document.getElementById("stTotal").textContent=items.length;
+  document.getElementById("stToday").textContent=nToday;
+  document.getElementById("stDup").textContent=nDup;
+  document.getElementById("listInfo").textContent=items.length?String(items.length):"";
+}
+
+/* ===================== settings UI ===================== */
+function segment(id,list,active,cb){
+  var el=document.getElementById(id);
+  if(!el) return;
+  el.innerHTML=list.map(function(o){
+    return '<button data-v="'+esc(String(o.v))+'"'+(String(o.v)===String(active)?' class="on"':"")+">"+esc(o.label)+"</button>";
+  }).join("");
+  Array.prototype.forEach.call(el.querySelectorAll("button"),function(b){
+    b.onclick=function(){
+      Array.prototype.forEach.call(el.querySelectorAll("button"),function(x){ x.classList.remove("on"); });
+      b.classList.add("on");
+      cb(b.getAttribute("data-v"));
+    };
+  });
+}
+function trimExample(){
+  var sample="YZ7-1024";
+  document.getElementById("trimEx").textContent=t("trimEx",sample,transform(sample)||"—");
+}
+function buildSegments(){
+  segment("segTrim",[{v:0,label:t("trim.0")},{v:1,label:t("trim.1")},
+                     {v:2,label:t("trim.2")},{v:3,label:t("trim.3")}],S.trim,function(v){
+    S.trim=parseInt(v,10); saveSet(); trimExample();
+  });
+  segment("segSwap",[{v:0,label:t("sw.off")},{v:1,label:t("sw.on")}],S.swap?1:0,function(v){
+    S.swap=(v==="1"); saveSet(); trimExample();
+  });
+  segment("segDup",[{v:"warn",label:t("dup.warn")},{v:"skip",label:t("dup.skip")},
+                    {v:"keep",label:t("dup.keep")}],S.dup,function(v){ S.dup=v; saveSet(); });
+  segment("segBand",[{v:0.11,label:t("band.s")},{v:0.16,label:t("band.m")},
+                     {v:0.24,label:t("band.l")}],S.band,function(v){
+    S.band=parseFloat(v); saveSet(); layoutMask();
+  });
+  segment("segBeep",[{v:1,label:t("on")},{v:0,label:t("off")}],S.beep?1:0,function(v){
+    S.beep=(v==="1"); saveSet();
+  });
+  trimExample();
+}
+
+/* ===================== export ===================== */
+function rows(){
+  return items.map(function(x,i){
+    return { no:i+1, sn:x.value, date:dstr(x.ts), time:tstr(x.ts),
+             raw:(x.raw===x.value?"":x.raw), fmt:x.fmt||"" };
+  });
+}
+function stamp(){ return dstr(Date.now()); }
+window.exportCsv=function(){
+  if(!items.length){ toast(t("t.noData")); return; }
+  var head=[t("xl.no"),t("xl.sn"),t("xl.date"),t("xl.time"),t("xl.raw"),t("xl.fmt")];
+  var q=function(s){ return '"'+String(s==null?"":s).replace(/"/g,'""')+'"'; };
+  var lines=["sep=;",head.join(";")];
+  rows().forEach(function(r){
+    lines.push([r.no,q(r.sn),q(r.date),q(r.time),q(r.raw),q(r.fmt)].join(";"));
+  });
+  download("Seriennummern_"+stamp()+".csv","\ufeff"+lines.join("\r\n"),"text/csv;charset=utf-8");
+};
+function loadScript(src){
+  return new Promise(function(res,rej){
+    var s=document.createElement("script");
+    s.src=src; s.onload=function(){ res(); }; s.onerror=function(){ rej(new Error("load")); };
+    document.head.appendChild(s);
+  });
+}
+window.exportXlsx=function(){
+  if(!items.length){ toast(t("t.noData")); return; }
+  var ready=window.XLSX?Promise.resolve():loadScript(XLSX_URL);
+  ready.then(function(){
+    if(!window.XLSX) throw new Error("nolib");
+    var aoa=[[t("xl.no"),t("xl.sn"),t("xl.date"),t("xl.time"),t("xl.raw"),t("xl.fmt")]];
+    rows().forEach(function(r){ aoa.push([r.no,r.sn,r.date,r.time,r.raw,r.fmt]); });
+    var ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"]=[{wch:6},{wch:26},{wch:12},{wch:10},{wch:20},{wch:12}];
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,"Seriennummern");
+    var out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+    download("Seriennummern_"+stamp()+".xlsx",
+      new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  }).catch(function(){ toast(t("t.xlsxErr")); });
+};
+window.backup=function(){
+  download("Scanner_Backup_"+stamp()+".json",
+    JSON.stringify({v:1,app:"sn-scanner",exported:new Date().toISOString(),settings:S,items:items},null,2),
+    "application/json");
+  toast(t("t.backupDone"));
+};
+window.restore=function(ev){
+  var f=ev.target.files&&ev.target.files[0]; if(!f) return;
+  var fr=new FileReader();
+  fr.onload=function(){
+    try{
+      var d=JSON.parse(fr.result);
+      var arr=d.items||(Array.isArray(d)?d:null);
+      if(!arr) throw new Error("bad");
+      if(!confirm(t("c.restore"))) items=arr;
+      else{
+        var have={}; items.forEach(function(x){ have[x.id]=1; });
+        arr.forEach(function(x){ if(!x.id) x.id=uid(); if(!have[x.id]) items.push(x); });
+      }
+      items.forEach(function(x){ if(x.value===undefined) x.value=transform(x.raw); });
+      recheckDups(); save(); render(); toast(t("t.restored",arr.length));
+    }catch(e){ toast(t("t.badFile")); }
+    ev.target.value="";
+  };
+  fr.readAsText(f);
+};
+window.clearAll=function(){
+  if(!items.length){ toast(t("t.noData")); return; }
+  if(!confirm(t("c.clear",items.length))) return;
+  items=[]; save(); render(); toast(t("t.cleared"));
+};
+
+/* ===================== scanner ===================== */
+var zx=null, stream=null, track=null, scanning=false, scanTimer=null;
+var lastVal="", lastAt=0, sessionCount=0, pendingDup=null;
+var cnv=null, ctx=null, audioCtx=null;
+
+function zxLib(){
+  if(zx) return Promise.resolve(zx);
+  return import(ZX_URL).then(function(m){ zx=m; return m; });
+}
+function layoutMask(){
+  var win=document.getElementById("win");
+  var top=document.getElementById("dimTop"), bot=document.getElementById("dimBot");
+  if(!win) return;
+  var h=Math.max(60,Math.round(window.innerHeight*S.band));
+  var y=Math.round((window.innerHeight-h)/2);
+  win.style.top=y+"px"; win.style.height=h+"px";
+  top.style.top="0"; top.style.height=y+"px";
+  bot.style.top=(y+h)+"px"; bot.style.bottom="0";
+}
+function beep(){
+  if(!S.beep) return;
+  try{ if(navigator.vibrate) navigator.vibrate(40); }catch(e){}
+  try{
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==="suspended") audioCtx.resume();
+    var o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.type="square"; o.frequency.value=1180;
+    g.gain.setValueAtTime(0.0001,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.09,audioCtx.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+0.11);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime+0.12);
+  }catch(e){}
+}
+function setHint(k){ document.getElementById("scanHint").textContent=k?t(k):""; }
+function setCount(){ document.getElementById("scanCnt").textContent=t("scan.cnt",sessionCount); }
+
+window.openScan=function(){
+  var note=document.getElementById("camNote");
+  note.hidden=true;
+  if(!window.isSecureContext){ note.textContent=t("cam.https"); note.hidden=false; return; }
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    note.textContent=t("cam.none"); note.hidden=false; return;
+  }
+  document.getElementById("scanView").hidden=false;
+  document.getElementById("lastHit").textContent="";
+  sessionCount=0; setCount();
+  setHint("scan.starting");
+  layoutMask();
+  /* the wasm engine and the camera can warm up at the same time */
+  zxLib().catch(function(){ toast(t("t.libErr")); });
+  navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:{ideal:"environment"},
+            width:{ideal:1920}, height:{ideal:1080} },
+    audio:false
+  }).then(function(st){
+    stream=st;
+    track=st.getVideoTracks()[0];
+    var v=document.getElementById("video");
+    v.srcObject=st;
+    var pr=v.play(); if(pr&&pr.catch) pr.catch(function(){});
+    setupTrack();
+    setHint("scan.loading");
+    return zxLib();
+  }).then(function(){
+    setHint("scan.hint");
+    scanning=true;
+    tickScan();
+  }).catch(function(e){
+    closeScan();
+    var name=e&&e.name;
+    note.textContent=(name==="NotAllowedError"||name==="SecurityError")?t("cam.denied"):t("cam.none");
+    note.hidden=false;
+  });
+};
+function setupTrack(){
+  if(!track||!track.getCapabilities) return;
+  var caps={};
+  try{ caps=track.getCapabilities()||{}; }catch(e){}
+  document.getElementById("btnTorch").hidden=!caps.torch;
+  var zr=document.getElementById("zoomRow"), zi=document.getElementById("zoom");
+  if(caps.zoom&&caps.zoom.max>caps.zoom.min){
+    zr.hidden=false;
+    zi.min=caps.zoom.min; zi.max=caps.zoom.max;
+    zi.step=caps.zoom.step||0.1;
+    zi.value=(track.getSettings&&track.getSettings().zoom)||caps.zoom.min;
+  } else zr.hidden=true;
+}
+window.setZoom=function(v){
+  if(!track) return;
+  try{ track.applyConstraints({advanced:[{zoom:parseFloat(v)}]}); }catch(e){}
+};
+var torchOn=false;
+window.toggleTorch=function(){
+  if(!track) return;
+  torchOn=!torchOn;
+  document.getElementById("btnTorch").classList.toggle("on",torchOn);
+  try{ track.applyConstraints({advanced:[{torch:torchOn}]}); }catch(e){}
+};
+window.closeScan=function(){
+  scanning=false;
+  if(scanTimer){ clearTimeout(scanTimer); scanTimer=null; }
+  pendingDup=null;
+  document.getElementById("dupBox").hidden=true;
+  try{ if(stream) stream.getTracks().forEach(function(tr){ tr.stop(); }); }catch(e){}
+  stream=null; track=null; torchOn=false;
+  var v=document.getElementById("video");
+  try{ v.pause(); v.srcObject=null; }catch(e){}
+  document.getElementById("btnTorch").classList.remove("on");
+  document.getElementById("scanView").hidden=true;
+};
+function tickScan(){
+  if(!scanning) return;
+  scanFrame().then(function(){
+    if(scanning) scanTimer=setTimeout(tickScan,90);
+  },function(){
+    if(scanning) scanTimer=setTimeout(tickScan,250);
+  });
+}
+function scanFrame(){
+  if(pendingDup) return Promise.resolve();
+  var v=document.getElementById("video");
+  if(!v||v.readyState<2||!v.videoWidth) return Promise.resolve();
+  cnv=cnv||document.createElement("canvas");
+  ctx=ctx||cnv.getContext("2d",{willReadFrequently:true});
+  /* only the strip inside the window is decoded: faster, and it cannot pick up
+     a neighbouring label that happens to be in the frame */
+  var vw=v.videoWidth, vh=v.videoHeight;
+  var bh=Math.max(40,Math.round(vh*S.band));
+  var by=Math.round((vh-bh)/2);
+  var bx=Math.round(vw*0.06), bw=vw-bx*2;
+  if(cnv.width!==bw||cnv.height!==bh){ cnv.width=bw; cnv.height=bh; }
+  ctx.drawImage(v,bx,by,bw,bh,0,0,bw,bh);
+  var data;
+  try{ data=ctx.getImageData(0,0,bw,bh); }catch(e){ return Promise.resolve(); }
+  return zx.readBarcodes(data,{formats:FORMATS,tryHarder:true,maxNumberOfSymbols:1})
+    .then(function(res){ if(res&&res.length) onHit(res[0]); });
+}
+function onHit(res){
+  var raw=String(res.text||"").trim();
+  if(!raw) return;
+  var now=Date.now();
+  if(raw===lastVal&&now-lastAt<1800) return;
+  lastVal=raw; lastAt=now;
+  var v=transform(raw);
+  if(!v) return;
+  if(isDup(v)){
+    if(S.dup==="skip"){ beep(); toast(t("t.skipped")); return; }
+    if(S.dup==="warn"){
+      pendingDup={raw:raw,fmt:res.format||""};
+      document.getElementById("dupMsg").textContent=t("dup.msg",v);
+      document.getElementById("dupBox").hidden=false;
+      beep();
+      return;
+    }
+  }
+  commit(raw,res.format||"");
+}
+function commit(raw,fmt){
+  var o=addItem(raw,fmt);
+  if(!o) return;
+  sessionCount++; setCount();
+  document.getElementById("lastHit").textContent="✓ "+o.value;
+  beep();
+}
+window.dupAnswer=function(yes){
+  var p=pendingDup; pendingDup=null;
+  document.getElementById("dupBox").hidden=true;
+  if(!p) return;
+  if(yes) commit(p.raw,p.fmt);
+  else toast(t("t.skipped"));
+  lastAt=Date.now();
+};
+
+/* ===================== update check ===================== */
+var lastUpdCheck=0;
+function checkUpdate(){
+  if(location.protocol==="file:") return;
+  if(Date.now()-lastUpdCheck<300000) return;
+  lastUpdCheck=Date.now();
+  fetch(location.pathname+"?v="+Date.now(),{cache:"no-store"})
+    .then(function(r){ return r.ok?r.text():null; })
+    .then(function(txt){
+      if(!txt) return;
+      var m=txt.match(/APP_VER="([^"]+)"/);
+      if(!m||!m[1]||m[1]===APP_VER) return;
+      document.getElementById("updVer").textContent="v"+m[1];
+      document.getElementById("updBar").hidden=false;
+    })
+    .catch(function(){});
+}
+window.doUpdate=function(){
+  var go=function(){ location.replace(location.pathname+"?v="+Date.now()); };
+  if(window.caches&&caches.keys){
+    caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
+      .then(go,go);
+  } else go();
+};
+
+/* ===================== language ===================== */
+window.setLang=function(l){
+  if(l!==lang){ lang=l; try{ localStorage.setItem(K_LANG,l); }catch(e){} }
+  applyLang();
+};
+function applyLang(){
+  document.documentElement.setAttribute("lang",lang);
+  document.getElementById("langKo").classList.toggle("on",lang==="ko");
+  document.getElementById("langDe").classList.toggle("on",lang==="de");
+  Array.prototype.forEach.call(document.querySelectorAll("[data-i18n]"),function(el){
+    el.textContent=t(el.getAttribute("data-i18n"));
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-i18n-ph]"),function(el){
+    el.setAttribute("placeholder",t(el.getAttribute("data-i18n-ph")));
+  });
+  document.getElementById("footNote").innerHTML=t("foot.note");
+  document.getElementById("verLine").textContent=t("ver.label")+" v"+APP_VER;
+  document.getElementById("dupBox").querySelector(".yes").textContent=t("dup.add");
+  document.getElementById("dupBox").querySelector(".no").textContent=t("dup.skip2");
+  buildSegments();
+  render();
+  if(scanning) setHint("scan.hint");
+}
+
+/* ===================== init ===================== */
+(function init(){
+  var sl=null; try{ sl=localStorage.getItem(K_LANG); }catch(e){}
+  if(sl==="ko"||sl==="de") lang=sl;
+  else lang=(navigator.language||"").toLowerCase().indexOf("ko")===0?"ko":"de";
+  load();
+  applyLang();
+  checkUpdate();
+  window.addEventListener("resize",layoutMask);
+  window.addEventListener("orientationchange",function(){ setTimeout(layoutMask,300); });
+  document.addEventListener("visibilitychange",function(){
+    if(!document.hidden) checkUpdate();
+    if(document.hidden&&scanning) closeScan();
+  });
+})();
+})();
+</script>
+
+</body>
+</html>
