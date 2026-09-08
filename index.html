@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0a68ff">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Scanner">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Seriennummer-Scanner</title>
@@ -34,7 +34,8 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   [hidden]{display:none!important}
   body{
-    margin:0 auto;padding:14px 14px 40px;background:var(--bg);color:var(--text);
+    margin:0 auto;background:var(--bg);color:var(--text);
+    padding:calc(14px + env(safe-area-inset-top)) 14px calc(40px + env(safe-area-inset-bottom));
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
     font-size:15px;line-height:1.45;max-width:680px;
   }
@@ -120,9 +121,10 @@
   .dupbox .yes{background:#fff;color:var(--amber)}
   .dupbox .no{background:rgba(0,0,0,.28);color:#fff}
 
-  .updbar{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  .updbar{position:sticky;top:calc(6px + env(safe-area-inset-top));z-index:60;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
     background:var(--blue);color:#fff;border-radius:12px;padding:10px 12px;margin-bottom:12px;
-    font-size:12.5px;font-weight:700}
+    font-size:12.5px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.28)}
   .updbar b{font-variant-numeric:tabular-nums}
   .updbar button{flex:0 0 auto;background:#fff;color:var(--blue);border:none;border-radius:9px;
     padding:8px 13px;font-size:12.5px;font-weight:800;cursor:pointer}
@@ -272,7 +274,7 @@
 (function(){
 "use strict";
 
-var APP_VER="2026-09-09a";
+var APP_VER="2026-09-09b";
 var K_LIST="sn_items_v1", K_SET="sn_settings_v1", K_LANG="sn_lang";
 var ZX_URL="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.2/+esm";
 var XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
