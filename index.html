@@ -247,6 +247,7 @@
   <div class="bar">
     <button class="icb" data-i18n="btn.close" onclick="closeScan()"></button>
     <div class="sp"></div>
+    <button class="icb" id="btnLock" onclick="toggleLock()" aria-label="lock">🔓</button>
     <button class="icb" id="btnTorch" hidden onclick="toggleTorch()">🔦</button>
   </div>
 
@@ -274,7 +275,7 @@
 (function(){
 "use strict";
 
-var APP_VER="2026-09-09b";
+var APP_VER="2026-09-09c";
 var K_LIST="sn_items_v1", K_SET="sn_settings_v1", K_LANG="sn_lang";
 var ZX_URL="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.2/+esm";
 var XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
@@ -282,7 +283,7 @@ var XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.j
    formats out keeps the decoder fast and stops it grabbing the wrong label */
 var FORMATS=["Code128","Code39","Code93","Codabar","EAN-13","EAN-8","UPC-A","UPC-E","ITF"];
 
-var S={ trim:0, swap:false, dup:"warn", band:0.16, beep:true };
+var S={ trim:0, swap:false, dup:"warn", band:0.16, beep:true, lock:false };
 var items=[], lang="de";
 
 /* ===================== i18n ===================== */
@@ -522,7 +523,7 @@ function buildSegments(){
                     {v:"keep",label:t("dup.keep")}],S.dup,function(v){ S.dup=v; saveSet(); });
   segment("segBand",[{v:0.11,label:t("band.s")},{v:0.16,label:t("band.m")},
                      {v:0.24,label:t("band.l")}],S.band,function(v){
-    S.band=parseFloat(v); saveSet(); layoutMask();
+    S.band=parseFloat(v); saveSet(); applyLock();
   });
   segment("segBeep",[{v:1,label:t("on")},{v:0,label:t("off")}],S.beep?1:0,function(v){
     S.beep=(v==="1"); saveSet();
@@ -612,12 +613,52 @@ function zxLib(){
   if(zx) return Promise.resolve(zx);
   return import(ZX_URL).then(function(m){ zx=m; return m; });
 }
+/* iOS Safari gives web apps no way to lock the orientation, so when the phone
+   turns we draw the whole scanner rotated back — it looks and behaves exactly
+   like a locked portrait screen. rotDeg also tells the decoder how to crop. */
+var rotDeg=0;
+function applyLock(){
+  var el=document.getElementById("scanView");
+  if(!el) return;
+  rotDeg=0;
+  el.style.transform=""; el.style.width=""; el.style.height="";
+  el.style.left=""; el.style.top=""; el.style.right=""; el.style.bottom="";
+  if(S.lock){
+    var w=window.innerWidth, h=window.innerHeight;
+    if(w>h){
+      var a=(typeof window.orientation==="number")?window.orientation
+            :((screen.orientation&&screen.orientation.angle)||90);
+      rotDeg=(a===-90||a===270)?90:-90;
+      el.style.width=h+"px"; el.style.height=w+"px";
+      el.style.left=Math.round((w-h)/2)+"px"; el.style.top=Math.round((h-w)/2)+"px";
+      el.style.right="auto"; el.style.bottom="auto";
+      el.style.transform="rotate("+rotDeg+"deg)";
+    }
+  }
+  var b=document.getElementById("btnLock");
+  if(b){ b.classList.toggle("on",!!S.lock); b.textContent=S.lock?"🔒":"🔓"; }
+  layoutMask();
+}
+function nativeLock(on){
+  try{
+    if(!window.screen||!screen.orientation) return;
+    if(on&&screen.orientation.lock){ var p=screen.orientation.lock("portrait"); if(p&&p.catch) p.catch(function(){}); }
+    else if(!on&&screen.orientation.unlock) screen.orientation.unlock();
+  }catch(e){}
+}
+window.toggleLock=function(){
+  S.lock=!S.lock; saveSet();
+  nativeLock(S.lock);
+  applyLock();
+};
 function layoutMask(){
   var win=document.getElementById("win");
   var top=document.getElementById("dimTop"), bot=document.getElementById("dimBot");
   if(!win) return;
-  var h=Math.max(60,Math.round(window.innerHeight*S.band));
-  var y=Math.round((window.innerHeight-h)/2);
+  var sv=document.getElementById("scanView");
+  var H=(sv&&sv.clientHeight)||window.innerHeight;
+  var h=Math.max(60,Math.round(H*S.band));
+  var y=Math.round((H-h)/2);
   win.style.top=y+"px"; win.style.height=h+"px";
   top.style.top="0"; top.style.height=y+"px";
   bot.style.top=(y+h)+"px"; bot.style.bottom="0";
@@ -651,7 +692,7 @@ window.openScan=function(){
   document.getElementById("lastHit").textContent="";
   sessionCount=0; setCount();
   setHint("scan.starting");
-  layoutMask();
+  applyLock();
   /* the wasm engine and the camera can warm up at the same time */
   zxLib().catch(function(){ toast(t("t.libErr")); });
   navigator.mediaDevices.getUserMedia({
@@ -712,7 +753,12 @@ window.closeScan=function(){
   var v=document.getElementById("video");
   try{ v.pause(); v.srcObject=null; }catch(e){}
   document.getElementById("btnTorch").classList.remove("on");
-  document.getElementById("scanView").hidden=true;
+  nativeLock(false);
+  rotDeg=0;
+  var sv=document.getElementById("scanView");
+  sv.style.transform=""; sv.style.width=""; sv.style.height="";
+  sv.style.left=""; sv.style.top=""; sv.style.right=""; sv.style.bottom="";
+  sv.hidden=true;
 };
 function tickScan(){
   if(!scanning) return;
@@ -731,11 +777,20 @@ function scanFrame(){
   /* only the strip inside the window is decoded: faster, and it cannot pick up
      a neighbouring label that happens to be in the frame */
   var vw=v.videoWidth, vh=v.videoHeight;
-  var bh=Math.max(40,Math.round(vh*S.band));
-  var by=Math.round((vh-bh)/2);
-  var bx=Math.round(vw*0.06), bw=vw-bx*2;
+  /* with the screen locked the frame is shown turned, so the strip the user
+     sees is a different slice of the raw frame — rotate first, then crop */
+  var swap=(rotDeg===90||rotDeg===-90);
+  var dw=swap?vh:vw, dh=swap?vw:vh;
+  var bh=Math.max(40,Math.round(dh*S.band));
+  var by=Math.round((dh-bh)/2);
+  var bx=Math.round(dw*0.06), bw=dw-bx*2;
   if(cnv.width!==bw||cnv.height!==bh){ cnv.width=bw; cnv.height=bh; }
-  ctx.drawImage(v,bx,by,bw,bh,0,0,bw,bh);
+  ctx.save();
+  ctx.translate(-bx,-by);
+  ctx.translate(dw/2,dh/2);
+  if(rotDeg) ctx.rotate(rotDeg*Math.PI/180);
+  ctx.drawImage(v,-vw/2,-vh/2);
+  ctx.restore();
   var data;
   try{ data=ctx.getImageData(0,0,bw,bh); }catch(e){ return Promise.resolve(); }
   return zx.readBarcodes(data,{formats:FORMATS,tryHarder:true,maxNumberOfSymbols:1})
@@ -834,8 +889,8 @@ function applyLang(){
   load();
   applyLang();
   checkUpdate();
-  window.addEventListener("resize",layoutMask);
-  window.addEventListener("orientationchange",function(){ setTimeout(layoutMask,300); });
+  window.addEventListener("resize",applyLock);
+  window.addEventListener("orientationchange",function(){ setTimeout(applyLock,320); });
   document.addEventListener("visibilitychange",function(){
     if(!document.hidden) checkUpdate();
     if(document.hidden&&scanning) closeScan();
