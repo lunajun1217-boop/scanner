@@ -57,6 +57,8 @@
   .row{display:flex;gap:9px;align-items:flex-end}
   .row>div{flex:1;min-width:0}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+  .grid3 .b{padding:13px 4px;font-size:14px}
   button.b{border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:700;color:#fff;cursor:pointer;width:100%}
   button.b:active{opacity:.75}
   .b-blue{background:var(--blue)}
@@ -65,6 +67,8 @@
   button.b-red{background:var(--red)}
   button:disabled{opacity:.45;cursor:default}
   .big{font-size:17px;padding:17px}
+  #btnScan{display:flex;align-items:center;justify-content:center;gap:10px}
+  .scanmark{width:24px;height:24px;flex:0 0 auto}
 
   .seg{display:flex;background:var(--chip);border-radius:11px;padding:3px;gap:2px}
   .seg button{flex:1;border:none;background:transparent;color:var(--muted);font-weight:700;
@@ -207,7 +211,18 @@
   <div><div class="k" data-i18n="st.dup"></div><div class="v" id="stDup">0</div></div>
 </div>
 
-<button class="b b-blue big" id="btnScan" data-i18n="btn.scan" onclick="openScan()"></button>
+<button class="b b-blue big" id="btnScan" onclick="openScan()">
+  <svg class="scanmark" viewBox="0 0 24 24" aria-hidden="true">
+    <g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 8V5.4A2.4 2.4 0 0 1 5.4 3H8"/>
+      <path d="M16 3h2.6A2.4 2.4 0 0 1 21 5.4V8"/>
+      <path d="M21 16v2.6a2.4 2.4 0 0 1-2.4 2.4H16"/>
+      <path d="M8 21H5.4A2.4 2.4 0 0 1 3 18.6V16"/>
+      <path d="M7.4 7.8v4.8M10.2 7.8v4.8M13 7.8v4.8M16.6 7.8v4.8" stroke-width="1.7"/>
+    </g>
+    <path d="M5.6 15.4h12.8" stroke="#ff5a4d" stroke-width="2.1" stroke-linecap="round"/>
+  </svg><span data-i18n="btn.scan"></span>
+</button>
 <p class="note" id="camNote" hidden></p>
 
 <div class="card" style="margin-top:13px">
@@ -262,8 +277,9 @@
 </div>
 <div id="list"></div>
 
-<div class="grid2" style="margin-top:13px">
+<div class="grid3" style="margin-top:13px">
   <button class="b b-green" data-i18n="btn.xlsx" onclick="exportXlsx()"></button>
+  <button class="b b-ghost" data-i18n="btn.pdf" onclick="exportPdf()"></button>
   <button class="b b-ghost" data-i18n="btn.csv" onclick="exportCsv()"></button>
 </div>
 <button class="b b-blue" style="margin-top:9px" data-i18n="btn.mail" onclick="mailOpen()"></button>
@@ -375,7 +391,7 @@
 (function(){
 "use strict";
 
-var APP_VER="2026-09-16c";
+var APP_VER="2026-09-17a";
 var K_LIST="sn_items_v1", K_SET="sn_settings_v1", K_LANG="sn_lang", K_PROD="sn_products_v1";
 var ZX_URL="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.2/+esm";
 var XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
@@ -384,6 +400,7 @@ var XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.j
 var FMT_1D=["Code128","Code39","Code93","Codabar","EAN-13","EAN-8","UPC-A","UPC-E","ITF"];
 var FMT_2D=["QRCode","MicroQRCode","DataMatrix","Aztec","PDF417"];
 function fmtList(){ return S.scanMode==="qr"?FMT_2D:FMT_1D; }
+var PDF_URL="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
 var OCR_JS="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
 var OCR_WORKER="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js";
 var OCR_CORE="https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1";
@@ -399,7 +416,7 @@ var items=[], lang="de", prodMap={};
 var STR={ko:{
  "app.title":"일련번호 스캐너","app.sub":"바코드를 읽어 엑셀 목록으로",
  "st.total":"전체","st.today":"오늘","st.dup":"중복",
- "btn.scan":"📷 스캔 시작","btn.close":"✕ 닫기","btn.add":"추가",
+ "btn.scan":"스캔 시작","btn.close":"✕ 닫기","btn.add":"추가",
  "f.manual":"직접 입력","ph.manual":"일련번호를 입력하고 Enter",
  "note.manual":"바코드가 지워졌거나 읽히지 않을 때 씁니다. 아래 변환 설정이 똑같이 적용됩니다.",
  "set.title":"변환 · 스캔 설정",
@@ -455,7 +472,10 @@ var STR={ko:{
  "ml.title":"메일로 보내기","ml.to":"받는 사람","ml.toPh":"name@schule.de","ml.subj":"제목",
  "ml.which":"보낼 범위","ml.as":"보낼 형식",
  "ml.all":"전체 {0}","ml.today":"오늘 {0}","ml.new":"새로 추가 {0}",
- "ml.xlsx":"엑셀 첨부","ml.csv":"CSV 첨부","ml.text":"본문에 목록",
+ "ml.xlsx":"엑셀","ml.pdf":"PDF","ml.csv":"CSV","ml.text":"본문에",
+ "btn.pdf":"PDF",
+ "t.pdfErr":"PDF 모듈을 불러오지 못했습니다 (인터넷 확인)",
+ "t.pdfLatin":"{0}칸은 PDF에 넣을 수 없는 글자라 비워 뒀습니다 (엑셀로 보내면 그대로 나옵니다)",
  "ml.count":"{0}개를 보냅니다","ml.go":"메일 앱 열기",
  "ml.subjDef":"일련번호 목록 {0}",
  "ml.bodyHead":"일련번호 {0}개 · {1}",
@@ -472,7 +492,7 @@ var STR={ko:{
 },de:{
  "app.title":"Seriennummer-Scanner","app.sub":"Barcodes scannen und als Excel-Liste",
  "st.total":"Gesamt","st.today":"Heute","st.dup":"Doppelt",
- "btn.scan":"📷 Scannen starten","btn.close":"✕ Schließen","btn.add":"Hinzufügen",
+ "btn.scan":"Scannen starten","btn.close":"✕ Schließen","btn.add":"Hinzufügen",
  "f.manual":"Manuell eingeben","ph.manual":"Seriennummer eingeben, dann Enter",
  "note.manual":"Für unlesbare oder fehlende Barcodes. Die Umwandlungen unten gelten genauso.",
  "set.title":"Umwandlung · Scan-Einstellungen",
@@ -528,7 +548,10 @@ var STR={ko:{
  "ml.title":"Per E-Mail senden","ml.to":"Empfänger","ml.toPh":"name@schule.de","ml.subj":"Betreff",
  "ml.which":"Umfang","ml.as":"Format",
  "ml.all":"Alle {0}","ml.today":"Heute {0}","ml.new":"Neu {0}",
- "ml.xlsx":"Excel anhängen","ml.csv":"CSV anhängen","ml.text":"Liste im Text",
+ "ml.xlsx":"Excel","ml.pdf":"PDF","ml.csv":"CSV","ml.text":"Im Text",
+ "btn.pdf":"PDF",
+ "t.pdfErr":"PDF-Modul konnte nicht geladen werden (Internet prüfen)",
+ "t.pdfLatin":"{0} Felder enthalten Zeichen, die das PDF nicht darstellen kann, und bleiben leer (per Excel kommen sie mit)",
  "ml.count":"{0} Einträge werden gesendet","ml.go":"Mail-App öffnen",
  "ml.subjDef":"Seriennummern {0}",
  "ml.bodyHead":"{0} Seriennummern · {1}",
@@ -983,6 +1006,75 @@ function csvText(list){
   });
   return "﻿"+lines.join("\r\n");
 }
+/* ---- PDF ----
+   jsPDF's built-in fonts cover Latin-1, so the sheet is laid out in German:
+   the list is written for the schools it is sent to, and every value in it
+   (serial, maker, date) is plain ASCII anyway. A product name typed in
+   another script is the one thing that cannot be drawn — those rows are
+   counted and the user is told to use Excel instead of being handed a
+   document with holes in it. */
+var PDF_HEAD=["Nr.","Seriennummer","Hersteller / Gerät","Datum","Uhrzeit"];
+/* jsPDF can draw code points up to 255 and no further; no regex escape
+   here, because a literal NUL in the source is asking for trouble */
+function latin1(s){
+  s=String(s==null?"":s);
+  for(var i=0;i<s.length;i++) if(s.charCodeAt(i)>255) return false;
+  return true;
+}
+function pdfBlob(list){
+  list=list||items;
+  var ready=(window.jspdf&&window.jspdf.jsPDF)?Promise.resolve():loadScript(PDF_URL);
+  return ready.then(function(){
+    var J=window.jspdf&&window.jspdf.jsPDF;
+    if(!J) throw new Error("nolib");
+    var doc=new J({unit:"mm",format:"a4"});
+    var W=210, M=14, y=0, page=1, body=rows(list), lost=0;
+
+    var col=[M, M+14, M+62, M+112, M+146];          /* column left edges */
+    var wid=[12, 46, 48, 32, 24];
+
+    function header(){
+      doc.setFillColor(10,104,255);
+      doc.rect(0,0,W,22,"F");
+      doc.setTextColor(255,255,255);
+      doc.setFont("helvetica","bold"); doc.setFontSize(14);
+      doc.text("Seriennummern",M,13);
+      doc.setFont("helvetica","normal"); doc.setFontSize(9);
+      doc.text(list.length+" Geräte  ·  "+dstr(Date.now()),W-M,13,{align:"right"});
+      doc.setTextColor(0,0,0);
+      y=32;
+      doc.setFont("helvetica","bold"); doc.setFontSize(9);
+      doc.setFillColor(238,242,249);
+      doc.rect(M,y-5,W-2*M,7,"F");
+      for(var i=0;i<PDF_HEAD.length;i++) doc.text(PDF_HEAD[i],col[i],y);
+      y+=6;
+      doc.setFont("helvetica","normal"); doc.setFontSize(9);
+    }
+    function footer(){
+      doc.setFontSize(8); doc.setTextColor(140,140,140);
+      doc.text("Seriennummer-Scanner  ·  v"+APP_VER,M,287);
+      doc.text("Seite "+page,W-M,287,{align:"right"});
+      doc.setTextColor(0,0,0); doc.setFontSize(9);
+    }
+    header();
+    body.forEach(function(r,i){
+      if(y>272){ footer(); doc.addPage(); page++; header(); }
+      if(i%2===1){ doc.setFillColor(247,247,249); doc.rect(M,y-4.4,W-2*M,6,"F"); }
+      var cells=[String(r.no), r.sn, r.prod||"", r.date, r.time];
+      for(var k=0;k<cells.length;k++){
+        var txt=cells[k];
+        if(!latin1(txt)){ lost++; txt=""; }                 /* cannot be drawn */
+        if(k===1) doc.setFont("courier","normal");
+        doc.text(doc.splitTextToSize(txt,wid[k])[0]||"",col[k],y);
+        if(k===1) doc.setFont("helvetica","normal");
+      }
+      y+=6;
+    });
+    footer();
+    if(lost) toast(t("t.pdfLatin",lost));
+    return doc.output("blob");
+  });
+}
 function xlsxBlob(list){
   var ready=window.XLSX?Promise.resolve():loadScript(XLSX_URL);
   return ready.then(function(){
@@ -1010,6 +1102,12 @@ function loadScript(src){
     document.head.appendChild(s);
   });
 }
+window.exportPdf=function(){
+  if(!items.length){ toast(t("t.noData")); return; }
+  pdfBlob().then(function(blob){
+    download("Seriennummern_"+stamp()+".pdf",blob);
+  }).catch(function(){ toast(t("t.pdfErr")); });
+};
 window.exportXlsx=function(){
   if(!items.length){ toast(t("t.noData")); return; }
   xlsxBlob().then(function(blob){
@@ -1071,7 +1169,8 @@ function buildMailSegments(){
     {v:"new",label:t("ml.new",mailScope("new").length)}
   ],mailWho,function(v){ mailWho=v; buildMailSegments(); });
   segment("segMailWhat",[
-    {v:"xlsx",label:t("ml.xlsx")},{v:"csv",label:t("ml.csv")},{v:"text",label:t("ml.text")}
+    {v:"xlsx",label:t("ml.xlsx")},{v:"pdf",label:t("ml.pdf")},
+    {v:"csv",label:t("ml.csv")},{v:"text",label:t("ml.text")}
   ],mailWhat,function(v){ mailWhat=v; buildMailSegments(); });
   var n=mailScope(mailWho).length;
   document.getElementById("mailCount").textContent=t("ml.count",n);
@@ -1101,10 +1200,11 @@ window.mailSend=function(){
     done();
     return;
   }
-  var name="Seriennummern_"+stamp()+(mailWhat==="csv"?".csv":".xlsx");
+  var ext=mailWhat==="csv"?".csv":mailWhat==="pdf"?".pdf":".xlsx";
+  var name="Seriennummern_"+stamp()+ext;
   var made=(mailWhat==="csv")
     ? Promise.resolve(new Blob([csvText(list)],{type:"text/csv;charset=utf-8"}))
-    : xlsxBlob(list);
+    : (mailWhat==="pdf") ? pdfBlob(list) : xlsxBlob(list);
   made.then(function(blob){
     var file=null;
     try{ file=new File([blob],name,{type:blob.type}); }catch(e){}
