@@ -375,7 +375,7 @@
 (function(){
 "use strict";
 
-var APP_VER="2026-09-16b";
+var APP_VER="2026-09-16c";
 var K_LIST="sn_items_v1", K_SET="sn_settings_v1", K_LANG="sn_lang", K_PROD="sn_products_v1";
 var ZX_URL="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.2/+esm";
 var XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
@@ -387,7 +387,9 @@ function fmtList(){ return S.scanMode==="qr"?FMT_2D:FMT_1D; }
 var OCR_JS="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
 var OCR_WORKER="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js";
 var OCR_CORE="https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1";
-var OCR_LANG="https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0";
+/* the integer-quantised model: same readings as the full one in testing,
+   but 2.8 MB instead of 10.9 — that matters on a phone over mobile data */
+var OCR_LANG="https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int";
 
 var S={ trim:0, swap:false, dup:"warn", band:0.16, beep:true, lock:false,
         mailTo:"", mailSubj:"", mailLast:0, scanMode:"bar" };
