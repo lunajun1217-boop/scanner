@@ -94,11 +94,22 @@
   .scan{position:fixed;inset:0;background:#000;z-index:80;display:flex;flex-direction:column}
   .scan video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
   .mask{position:absolute;inset:0;pointer-events:none}
-  .mask .dim{position:absolute;left:0;right:0;background:rgba(0,0,0,.62)}
-  .win{position:absolute;left:6%;right:6%;border:2px solid rgba(255,255,255,.9);border-radius:10px;
-    box-shadow:0 0 0 100vmax rgba(0,0,0,.001)}
+  .mask .dim{display:none}
+  /* one cut-out instead of two bands, so the window can be a strip for a
+     barcode, a square for a QR code or a box for text without extra panels */
+  .win{position:absolute;border:2px solid rgba(255,255,255,.9);border-radius:10px;
+    box-shadow:0 0 0 100vmax rgba(0,0,0,.62)}
   .win i{position:absolute;left:8px;right:8px;top:50%;height:2px;background:var(--red);
     box-shadow:0 0 8px rgba(224,50,43,.9);transform:translateY(-1px)}
+  .win.box i{display:none}
+  .modeseg{position:relative;z-index:3;margin:0 0 10px;display:flex;
+    background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:3px}
+  .modeseg button{flex:1;border:none;background:transparent;color:rgba(255,255,255,.75);
+    font-weight:700;font-size:13px;padding:9px 4px;border-radius:9px;cursor:pointer;white-space:nowrap}
+  .modeseg button.on{background:#fff;color:#000}
+  .shoot{background:#fff;border:none;color:#000;border-radius:12px;padding:14px;
+    font-size:15px;font-weight:800;cursor:pointer;width:100%;margin-bottom:10px}
+  .shoot:disabled{opacity:.5}
   .scan .bar{position:relative;z-index:2;display:flex;align-items:center;gap:9px;
     padding:calc(10px + env(safe-area-inset-top)) 12px 10px}
   .scan .bar .sp{flex:1}
@@ -154,6 +165,13 @@
   .pchips button{background:var(--chip);border:1px solid var(--line);border-radius:999px;
     padding:7px 12px;font-size:12px;font-weight:700;color:var(--text);cursor:pointer}
   .pchips button:active{opacity:.65}
+  .pchips button .vd{font-weight:800;color:var(--blue);margin-left:5px;font-size:11px}
+  .pchips button .fx{font-weight:800;color:var(--amber);margin-left:5px;font-size:11px}
+  .pchips button.top{border-color:var(--blue);background:var(--card)}
+  .rawtext{background:var(--field);border:1px solid var(--line);border-radius:11px;
+    padding:10px 12px;font-size:12px;line-height:1.5;color:var(--muted);max-height:120px;
+    overflow-y:auto;white-space:pre-wrap;word-break:break-all;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   /* keep a toast off the editor buttons while it is open */
   body.editing .toast{bottom:auto;top:calc(12px + env(safe-area-inset-top))}
   .verbox{text-align:center;margin-top:12px}
@@ -259,6 +277,21 @@
 <p class="tiny" id="footNote"></p>
 <div class="verbox"><span id="verLine"></span></div>
 
+<!-- ================= what did we read? ================= -->
+<div class="modal" id="pickBox" hidden>
+  <div class="modal-in">
+    <h3 id="pickTitle"></h3>
+    <p class="note" style="margin-top:0" id="pickHint"></p>
+    <div class="rawtext" id="pickRaw"></div>
+    <label style="margin-top:12px" data-i18n="pk.cands"></label>
+    <div class="pchips" id="pickChips"></div>
+    <label style="margin-top:10px" data-i18n="pk.edit"></label>
+    <input type="text" id="pickIn" autocapitalize="characters" autocomplete="off" spellcheck="false">
+    <button class="b b-blue" style="margin-top:11px" data-i18n="pk.save" onclick="pickSave()"></button>
+    <button class="b b-ghost" style="margin-top:9px" data-i18n="pk.cancel" onclick="pickClose()"></button>
+  </div>
+</div>
+
 <!-- ================= send by mail ================= -->
 <div class="modal" id="mailBox" hidden>
   <div class="modal-in">
@@ -325,6 +358,8 @@
   </div>
 
   <div class="foot">
+    <div class="modeseg" id="segScanMode"></div>
+    <button class="shoot" id="btnShoot" data-i18n="btn.shoot" onclick="shootText()" hidden></button>
     <div class="zoomrow" id="zoomRow" hidden>
       <span>🔍</span>
       <input type="range" id="zoom" min="1" max="5" step="0.1" value="1" oninput="setZoom(this.value)">
@@ -340,16 +375,22 @@
 (function(){
 "use strict";
 
-var APP_VER="2026-09-16a";
+var APP_VER="2026-09-16b";
 var K_LIST="sn_items_v1", K_SET="sn_settings_v1", K_LANG="sn_lang", K_PROD="sn_products_v1";
 var ZX_URL="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.2/+esm";
 var XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
 /* 1D only: a serial-number sticker is never a QR code, and leaving the 2D
    formats out keeps the decoder fast and stops it grabbing the wrong label */
-var FORMATS=["Code128","Code39","Code93","Codabar","EAN-13","EAN-8","UPC-A","UPC-E","ITF"];
+var FMT_1D=["Code128","Code39","Code93","Codabar","EAN-13","EAN-8","UPC-A","UPC-E","ITF"];
+var FMT_2D=["QRCode","MicroQRCode","DataMatrix","Aztec","PDF417"];
+function fmtList(){ return S.scanMode==="qr"?FMT_2D:FMT_1D; }
+var OCR_JS="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+var OCR_WORKER="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js";
+var OCR_CORE="https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1";
+var OCR_LANG="https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0";
 
 var S={ trim:0, swap:false, dup:"warn", band:0.16, beep:true, lock:false,
-        mailTo:"", mailSubj:"", mailLast:0 };
+        mailTo:"", mailSubj:"", mailLast:0, scanMode:"bar" };
 var items=[], lang="de", prodMap={};
 
 /* ===================== i18n ===================== */
@@ -394,6 +435,20 @@ var STR={ko:{
  "foot.note":"모든 데이터는 이 기기(브라우저) 안에만 저장됩니다.<br>Safari/Chrome에서 <b>홈 화면에 추가</b>하면 앱처럼 쓸 수 있습니다.<br>가끔 <b>백업(JSON)</b>을 받아두면 안전합니다.",
  "ver.label":"앱 버전",
  "upd.msg":"새 버전이 나왔습니다","upd.btn":"업데이트",
+ "sm.bar":"바코드","sm.qr":"QR 코드","sm.text":"텍스트",
+ "btn.shoot":"📸 글자 읽기",
+ "scan.hintQr":"QR 코드를 네모 안에 맞추세요",
+ "scan.hintText":"일련번호가 적힌 부분을 네모 안에 크게 담고 [글자 읽기]를 누르세요",
+ "ocr.loading":"글자 인식 기능을 준비하는 중… (처음 한 번만 받습니다)",
+ "ocr.working":"글자를 읽는 중…",
+ "t.ocrErr":"글자 인식을 불러오지 못했습니다 (인터넷 확인)",
+ "t.noFrame":"카메라 화면이 아직 준비되지 않았습니다",
+ "pk.titleQr":"QR 내용 확인","pk.titleOcr":"읽은 글자 확인",
+ "pk.hintQr":"QR 안에서 일련번호를 찾지 못했습니다. 아래에서 고르거나 직접 고쳐 주세요.",
+ "pk.hintOcr":"카메라가 읽은 글자입니다. 맞는 번호를 고르거나 직접 고쳐 주세요.",
+ "pk.cands":"후보","pk.edit":"저장할 번호","pk.save":"저장","pk.cancel":"닫기",
+ "src.from":"읽은 내용: {0}",
+ "pk.fixed":"교정","pk.none":"번호처럼 보이는 것이 없습니다","pk.nothing":"(읽은 내용 없음)",
  "btn.mail":"📧 메일로 보내기",
  "ml.title":"메일로 보내기","ml.to":"받는 사람","ml.toPh":"name@schule.de","ml.subj":"제목",
  "ml.which":"보낼 범위","ml.as":"보낼 형식",
@@ -453,6 +508,20 @@ var STR={ko:{
  "foot.note":"Alle Daten bleiben ausschließlich auf diesem Gerät.<br>In Safari/Chrome über <b>Zum Home-Bildschirm</b> wie eine App nutzbar.<br>Ein gelegentliches <b>Backup (JSON)</b> schützt vor Verlust.",
  "ver.label":"App-Version",
  "upd.msg":"Neue Version verfügbar","upd.btn":"Aktualisieren",
+ "sm.bar":"Barcode","sm.qr":"QR-Code","sm.text":"Text",
+ "btn.shoot":"📸 Text lesen",
+ "scan.hintQr":"QR-Code in das Quadrat legen",
+ "scan.hintText":"Die Seriennummer groß in den Rahmen legen, dann [Text lesen] tippen",
+ "ocr.loading":"Texterkennung wird vorbereitet… (nur beim ersten Mal)",
+ "ocr.working":"Text wird gelesen…",
+ "t.ocrErr":"Texterkennung konnte nicht geladen werden (Internet prüfen)",
+ "t.noFrame":"Das Kamerabild ist noch nicht bereit",
+ "pk.titleQr":"QR-Inhalt prüfen","pk.titleOcr":"Gelesenen Text prüfen",
+ "pk.hintQr":"Im QR-Code war keine eindeutige Seriennummer. Bitte auswählen oder korrigieren.",
+ "pk.hintOcr":"Das hat die Kamera gelesen. Bitte die richtige Nummer wählen oder korrigieren.",
+ "pk.cands":"Vorschläge","pk.edit":"Zu speichernde Nummer","pk.save":"Speichern","pk.cancel":"Schließen",
+ "src.from":"gelesen: {0}",
+ "pk.fixed":"korrigiert","pk.none":"Nichts gefunden, was nach einer Nummer aussieht","pk.nothing":"(nichts gelesen)",
  "btn.mail":"📧 Per E-Mail senden",
  "ml.title":"Per E-Mail senden","ml.to":"Empfänger","ml.toPh":"name@schule.de","ml.subj":"Betreff",
  "ml.which":"Umfang","ml.as":"Format",
@@ -609,6 +678,113 @@ function productOf(x){
 }
 function productName(x){ var p=productOf(x); return p?p.name:""; }
 
+/* ============ pulling a serial out of free text ============
+   A QR code and a photographed label do not hand over a serial number — they
+   hand over a URL, or four lines of small print. This turns that into a short
+   list of candidates, best first.
+
+   The vendor rules above earn their keep twice here: a token shaped like a
+   known maker's serial is almost certainly the serial, and when the camera
+   reads an O where the label prints a 0, trying the swap and watching it snap
+   onto an unambiguous format is proof enough to offer the corrected reading. */
+var SN_LABEL=/^\s*(s\s*[\/.\-]?\s*n|sn|serial\s*(no|nr|number)?|seriennummer|ser\s*[\.\-]?\s*no|geräte?nummer|device\s*id)\s*[:.\-=]?\s*/i;
+var OTHER_LABEL=/^\s*(p\s*[\/.\-]?\s*n|part\s*(no|nr)?|model|modell|type|typ|mac|imei|art\s*[\.\-]?\s*nr|ean|ref)\s*[:.\-=]?\s*/i;
+var PICK_SURE=60;          /* below this it is a suggestion, not an answer */
+
+function vendorRule(s){
+  var u=String(s).toUpperCase();
+  for(var i=0;i<VENDORS.length;i++) if(VENDORS[i].re.test(u)) return VENDORS[i];
+  return null;
+}
+var CONFUSE=[["O","0"],["0","O"],["I","1"],["1","I"],["L","1"],["S","5"],["5","S"],
+             ["B","8"],["8","B"],["Z","2"],["2","Z"],["G","6"],["Q","0"]];
+function repaired(s){
+  if(vendorRule(s)) return null;                 /* already valid — leave it be */
+  /* Only rewrite what the camera read when the token is ALREADY serial-shaped
+     and the repair lands on a format that belongs to one maker alone. Without
+     both guards a phone number becomes a "Dell service tag", and invented
+     data in an equipment list is worse than no reading at all. */
+  if(!/[A-Z]/.test(s)||!/[0-9]/.test(s)) return null;
+  var seen={}, out=null, i, k, v, m;
+  for(i=0;i<CONFUSE.length&&!out;i++){
+    v=s.split(CONFUSE[i][0]).join(CONFUSE[i][1]);
+    if(v!==s&&!seen[v]){ seen[v]=1; m=vendorRule(v); if(m&&m.c===2) out=v; }
+  }
+  if(out) return out;
+  for(i=0;i<CONFUSE.length&&!out;i++){
+    for(k=0;k<CONFUSE.length&&!out;k++){
+      if(i===k) continue;
+      v=s.split(CONFUSE[i][0]).join(CONFUSE[i][1]).split(CONFUSE[k][0]).join(CONFUSE[k][1]);
+      if(v!==s&&!seen[v]){ seen[v]=1; m=vendorRule(v); if(m&&m.c===2) out=v; }
+    }
+  }
+  return out;
+}
+function scoreToken(s,flagged,penalised){
+  if(s.length<5||s.length>26) return -1;
+  var digits=(s.match(/[0-9]/g)||[]).length;
+  var alpha=(s.match(/[A-Za-z]/g)||[]).length;
+  var upper=(s.match(/[A-Z]/g)||[]).length;
+  if(s.length-digits-alpha>1) return -1;         /* punctuation-heavy */
+  if(/[:+@]/.test(s)) return -1;                 /* a MAC, a phone, a time */
+  if(!digits) return -1;                         /* every serial carries digits */
+  var sc=0;
+  if(vendorRule(s)) sc+=100;
+  if(flagged) sc+=60;
+  if(penalised) sc-=45;
+  if(alpha&&digits) sc+=18;
+  if(alpha&&upper===alpha) sc+=10;
+  if(s.length>=7&&s.length<=18) sc+=12;
+  if(/^[0-9]+$/.test(s)) sc-=12;
+  if(/^[A-Za-z]+$/.test(s)) sc-=30;
+  return sc;
+}
+function pickSerial(text){
+  var raw=String(text==null?"":text).trim();
+  if(!raw) return [];
+  var cands=[];
+  /* a URL keeps its payload in a named parameter or the last path piece */
+  if(/^[a-z][a-z0-9+.\-]*:\/\//i.test(raw)||/^www\./i.test(raw)){
+    var q=raw.split("?")[1]||"";
+    q.split("&").forEach(function(kv){
+      var k=(kv.split("=")[0]||"").toLowerCase(), v=kv.split("=").slice(1).join("=");
+      if(/^(sn|s_n|serial|seriennummer|serialnumber|id|device|asset)$/.test(k)&&v){
+        try{ v=decodeURIComponent(v); }catch(e){}
+        cands.push({tok:v,flag:true,pen:false});
+      }
+    });
+    var last=raw.split("?")[0].replace(/\/+$/,"").split("/").pop();
+    if(last) cands.push({tok:last,flag:false,pen:false});
+  }
+  raw.split(/[\r\n]+/).forEach(function(line){
+    var l=line.trim();
+    if(!l) return;
+    var flag=SN_LABEL.test(l), pen=!flag&&OTHER_LABEL.test(l);
+    if(flag) l=l.replace(SN_LABEL,"");
+    else if(pen) l=l.replace(OTHER_LABEL,"");
+    l.split(/[\s,;|:=&?]+/).forEach(function(tok){
+      tok=tok.replace(/^[^0-9A-Za-z]+|[^0-9A-Za-z\-]+$/g,"");
+      if(tok) cands.push({tok:tok,flag:flag,pen:pen});
+    });
+  });
+  var out=[], seen={};
+  cands.forEach(function(c){
+    var list=[[c.tok,false]], fix=repaired(c.tok.toUpperCase());
+    if(fix) list.push([fix,true]);
+    list.forEach(function(p){
+      var v=p[0];
+      if(seen[v]) return;
+      var sc=scoreToken(v,c.flag,c.pen);
+      if(sc<0) return;
+      seen[v]=1;
+      var ven=vendorRule(v);
+      out.push({value:v,score:sc+(p[1]?3:0),fixed:p[1],vendor:ven?ven.v:null});
+    });
+  });
+  out.sort(function(a,b){ return b.score-a.score; });
+  return out.slice(0,6);
+}
+
 /* ===================== list ===================== */
 function load(){
   items=lsGet(K_LIST,[]);
@@ -622,10 +798,13 @@ function saveProd(){ lsSet(K_PROD,prodMap); }
 function isDup(v,skipId){
   return items.some(function(x){ return x.value===v&&x.id!==skipId; });
 }
-function addItem(raw,fmt){
+function addItem(raw,fmt,src){
   var v=transform(raw);
   if(!v) return null;
   var o={ id:uid(), raw:String(raw), value:v, ts:Date.now(), fmt:fmt||"" };
+  /* what the QR code or the camera actually held, when a number was picked
+     out of it — nothing the device told us is thrown away */
+  if(src&&src!==String(raw)) o.src=String(src);
   o.dup=isDup(v);
   items.push(o); save(); render();
   return o;
@@ -715,6 +894,7 @@ function render(){
       var n=items.length-i;
       var meta=dstr(x.ts)+" "+tstr(x.ts);
       if(x.raw!==x.value) meta+=" · "+t("orig",x.raw);
+      if(x.src) meta+=" · "+esc(t("src.from",x.src.length>34?x.src.slice(0,34)+"…":x.src));
       if(x.dup) meta+=" · <b>"+esc(t("st.dup"))+"</b>";
       var p=productOf(x), chip;
       if(!p) chip='<div class="prod none">'+esc(t("pr.unknown"))+"</div>";
@@ -1028,17 +1208,25 @@ window.toggleLock=function(){
   nativeLock(S.lock);
   applyLock();
 };
+/* one description of the window, used both to draw it and to crop the frame,
+   so what the decoder reads is exactly what the user framed */
+function winRect(W,H){
+  var m=S.scanMode, w, h;
+  if(m==="qr"){ var side=Math.min(W*0.78,H*0.55); w=side; h=side; }      /* square */
+  else if(m==="text"){ w=W*0.88; h=Math.max(90,H*0.34); }               /* a box  */
+  else { w=W*0.88; h=Math.max(60,H*S.band); }                           /* a strip*/
+  return {x:Math.round((W-w)/2),y:Math.round((H-h)/2),w:Math.round(w),h:Math.round(h)};
+}
 function layoutMask(){
   var win=document.getElementById("win");
-  var top=document.getElementById("dimTop"), bot=document.getElementById("dimBot");
   if(!win) return;
   var sv=document.getElementById("scanView");
+  var W=(sv&&sv.clientWidth)||window.innerWidth;
   var H=(sv&&sv.clientHeight)||window.innerHeight;
-  var h=Math.max(60,Math.round(H*S.band));
-  var y=Math.round((H-h)/2);
-  win.style.top=y+"px"; win.style.height=h+"px";
-  top.style.top="0"; top.style.height=y+"px";
-  bot.style.top=(y+h)+"px"; bot.style.bottom="0";
+  var r=winRect(W,H);
+  win.style.left=r.x+"px"; win.style.top=r.y+"px";
+  win.style.width=r.w+"px"; win.style.height=r.h+"px";
+  win.classList.toggle("box",S.scanMode!=="bar");
 }
 function beep(){
   if(!S.beep) return;
@@ -1069,6 +1257,8 @@ window.openScan=function(){
   document.getElementById("lastHit").textContent="";
   sessionCount=0; setCount();
   setHint("scan.starting");
+  buildModeSeg();
+  document.getElementById("btnShoot").hidden=(S.scanMode!=="text");
   applyLock();
   /* the wasm engine and the camera can warm up at the same time */
   zxLib().catch(function(){ toast(t("t.libErr")); });
@@ -1086,7 +1276,8 @@ window.openScan=function(){
     setHint("scan.loading");
     return zxLib();
   }).then(function(){
-    setHint("scan.hint");
+    if(S.scanMode==="text"){ setHint("scan.hintText"); return; }
+    setHint(S.scanMode==="qr"?"scan.hintQr":"scan.hint");
     scanning=true;
     tickScan();
   }).catch(function(e){
@@ -1124,6 +1315,10 @@ window.closeScan=function(){
   scanning=false;
   if(scanTimer){ clearTimeout(scanTimer); scanTimer=null; }
   pendingDup=null;
+  ocrStop();
+  ocrBusy=false;
+  document.getElementById("btnShoot").disabled=false;
+  pickClose();
   document.getElementById("dupBox").hidden=true;
   try{ if(stream) stream.getTracks().forEach(function(tr){ tr.stop(); }); }catch(e){}
   stream=null; track=null; torchOn=false;
@@ -1146,7 +1341,8 @@ function tickScan(){
   });
 }
 function scanFrame(){
-  if(pendingDup) return Promise.resolve();
+  if(pendingDup||S.scanMode==="text") return Promise.resolve();
+  if(!document.getElementById("pickBox").hidden) return Promise.resolve();
   var v=document.getElementById("video");
   if(!v||v.readyState<2||!v.videoWidth) return Promise.resolve();
   cnv=cnv||document.createElement("canvas");
@@ -1158,9 +1354,8 @@ function scanFrame(){
      sees is a different slice of the raw frame — rotate first, then crop */
   var swap=(rotDeg===90||rotDeg===-90);
   var dw=swap?vh:vw, dh=swap?vw:vh;
-  var bh=Math.max(40,Math.round(dh*S.band));
-  var by=Math.round((dh-bh)/2);
-  var bx=Math.round(dw*0.06), bw=dw-bx*2;
+  var r=winRect(dw,dh);
+  var bx=r.x, by=r.y, bw=r.w, bh=r.h;
   if(cnv.width!==bw||cnv.height!==bh){ cnv.width=bw; cnv.height=bh; }
   ctx.save();
   ctx.translate(-bx,-by);
@@ -1170,7 +1365,7 @@ function scanFrame(){
   ctx.restore();
   var data;
   try{ data=ctx.getImageData(0,0,bw,bh); }catch(e){ return Promise.resolve(); }
-  return zx.readBarcodes(data,{formats:FORMATS,tryHarder:true,maxNumberOfSymbols:1})
+  return zx.readBarcodes(data,{formats:fmtList(),tryHarder:true,maxNumberOfSymbols:1})
     .then(function(res){ if(res&&res.length) onHit(res[0]); });
 }
 function onHit(res){
@@ -1179,32 +1374,195 @@ function onHit(res){
   var now=Date.now();
   if(raw===lastVal&&now-lastAt<1800) return;
   lastVal=raw; lastAt=now;
+  /* a QR code rarely holds the bare number — it holds a link or a whole
+     label. Pull the serial out of it, and ask when the reading is not clear */
+  var payload=null;
+  if(S.scanMode==="qr"){
+    var picks=pickSerial(raw);
+    if(!picks.length||picks[0].score<PICK_SURE){
+      beep();
+      openPick(raw,picks,"qr");
+      return;
+    }
+    if(picks[0].value!==raw){ payload=raw; raw=picks[0].value; }
+  }
   var v=transform(raw);
   if(!v) return;
   if(isDup(v)){
     if(S.dup==="skip"){ beep(); toast(t("t.skipped")); return; }
     if(S.dup==="warn"){
-      pendingDup={raw:raw,fmt:res.format||""};
+      pendingDup={raw:raw,fmt:res.format||"",src:payload};
       document.getElementById("dupMsg").textContent=t("dup.msg",v);
       document.getElementById("dupBox").hidden=false;
       beep();
       return;
     }
   }
-  commit(raw,res.format||"");
+  commit(raw,res.format||"",payload);
 }
-function commit(raw,fmt){
-  var o=addItem(raw,fmt);
+function commit(raw,fmt,src){
+  var o=addItem(raw,fmt,src);
   if(!o) return;
   sessionCount++; setCount();
   document.getElementById("lastHit").textContent="✓ "+o.value;
   beep();
 }
+/* ===================== scan mode ===================== */
+function buildModeSeg(){
+  segment("segScanMode",[
+    {v:"bar",label:t("sm.bar")},{v:"qr",label:t("sm.qr")},{v:"text",label:t("sm.text")}
+  ],S.scanMode,function(v){ setScanMode(v); });
+}
+function setScanMode(m){
+  S.scanMode=m; saveSet();
+  lastVal="";
+  document.getElementById("btnShoot").hidden=(m!=="text");
+  document.getElementById("lastHit").textContent="";
+  layoutMask();
+  if(m==="text"){
+    scanning=false;
+    if(scanTimer){ clearTimeout(scanTimer); scanTimer=null; }
+    setHint("scan.hintText");
+  }else if(stream){
+    setHint(m==="qr"?"scan.hintQr":"scan.hint");
+    if(!scanning){ scanning=true; tickScan(); }
+  }
+}
+
+/* ===================== text scan (OCR) =====================
+   Reading a label with the camera is a photo, not a video: recognition takes
+   the better part of a second, so it runs once on a frame the user chose
+   rather than on every frame. The result is never written in silently — the
+   candidates are offered and the user confirms one. */
+var ocrWorker=null, ocrBusy=false;
+function ocrLib(){
+  if(window.Tesseract) return Promise.resolve(window.Tesseract);
+  return loadScript(OCR_JS).then(function(){
+    if(!window.Tesseract) throw new Error("nolib");
+    return window.Tesseract;
+  });
+}
+function ocrReady(){
+  if(ocrWorker) return Promise.resolve(ocrWorker);
+  return ocrLib().then(function(T){
+    return T.createWorker("eng",1,{
+      workerPath:OCR_WORKER, corePath:OCR_CORE, langPath:OCR_LANG,
+      logger:function(m){
+        if(m&&m.status&&/load|initial|recogn/i.test(m.status)){
+          var pct=m.progress?" "+Math.round(m.progress*100)+"%":"";
+          document.getElementById("scanHint").textContent=t("ocr.working")+pct;
+        }
+      }
+    });
+  }).then(function(w){ ocrWorker=w; return w; });
+}
+function ocrStop(){
+  if(!ocrWorker) return;
+  try{ ocrWorker.terminate(); }catch(e){}
+  ocrWorker=null;
+}
+window.shootText=function(){
+  if(ocrBusy) return;
+  var v=document.getElementById("video");
+  if(!v||v.readyState<2||!v.videoWidth){ toast(t("t.noFrame")); return; }
+  ocrBusy=true;
+  var btn=document.getElementById("btnShoot");
+  btn.disabled=true;
+  setHint("ocr.loading");
+  /* grab exactly the window the user framed, upscaled — small text on a
+     phone frame is the single biggest cause of a bad reading */
+  var swap=(rotDeg===90||rotDeg===-90);
+  var vw=v.videoWidth, vh=v.videoHeight;
+  var dw=swap?vh:vw, dh=swap?vw:vh;
+  var r=winRect(dw,dh);
+  var scale=Math.min(3,Math.max(1,1400/r.w));
+  var c=document.createElement("canvas");
+  c.width=Math.round(r.w*scale); c.height=Math.round(r.h*scale);
+  var cx=c.getContext("2d");
+  cx.save();
+  cx.scale(scale,scale);
+  cx.translate(-r.x,-r.y);
+  cx.translate(dw/2,dh/2);
+  if(rotDeg) cx.rotate(rotDeg*Math.PI/180);
+  cx.drawImage(v,-vw/2,-vh/2);
+  cx.restore();
+  /* grey + contrast: the recogniser does markedly better on clean strokes */
+  try{
+    var img=cx.getImageData(0,0,c.width,c.height), d=img.data;
+    for(var i=0;i<d.length;i+=4){
+      var g=(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114);
+      g=(g-128)*1.35+128;
+      g=g<0?0:g>255?255:g;
+      d[i]=d[i+1]=d[i+2]=g;
+    }
+    cx.putImageData(img,0,0);
+  }catch(e){}
+
+  ocrReady().then(function(w){
+    setHint("ocr.working");
+    return w.recognize(c);
+  }).then(function(res){
+    var txt=(res&&res.data&&res.data.text)||"";
+    beep();
+    openPick(txt.trim(),pickSerial(txt),"ocr");
+  }).catch(function(){
+    toast(t("t.ocrErr"));
+  }).then(function(){
+    ocrBusy=false;
+    btn.disabled=false;
+    setHint("scan.hintText");
+  });
+};
+
+/* ===================== the reading confirmation ===================== */
+var pickSrc="qr", pickRawText="";
+function openPick(raw,cands,src){
+  pickSrc=src;
+  document.getElementById("pickTitle").textContent=t(src==="ocr"?"pk.titleOcr":"pk.titleQr");
+  document.getElementById("pickHint").textContent=t(src==="ocr"?"pk.hintOcr":"pk.hintQr");
+  pickRawText=raw||"";
+  document.getElementById("pickRaw").textContent=raw||t("pk.nothing");
+  var box=document.getElementById("pickChips");
+  box.innerHTML=(cands||[]).map(function(c,i){
+    return '<button type="button"'+(i===0?' class="top"':'')+' data-v="'+esc(c.value)+'">'+
+      esc(c.value)+
+      (c.vendor?'<span class="vd">'+esc(c.vendor)+"</span>":"")+
+      (c.fixed?'<span class="fx">'+esc(t("pk.fixed"))+"</span>":"")+"</button>";
+  }).join("")||'<span class="note" style="margin:0">'+esc(t("pk.none"))+"</span>";
+  Array.prototype.forEach.call(box.querySelectorAll("button"),function(b){
+    b.onclick=function(){ document.getElementById("pickIn").value=b.getAttribute("data-v"); };
+  });
+  document.getElementById("pickIn").value=(cands&&cands.length)?cands[0].value:"";
+  document.getElementById("pickBox").hidden=false;
+  document.body.classList.add("editing");
+}
+window.pickClose=function(){
+  document.getElementById("pickBox").hidden=true;
+  document.body.classList.remove("editing");
+  lastAt=Date.now();
+};
+window.pickSave=function(){
+  var v=document.getElementById("pickIn").value.trim();
+  if(!v){ toast(t("t.needText")); return; }
+  var val=transform(v);
+  if(isDup(val)&&S.dup!=="keep"){
+    if(!confirm(t("dup.msg",val)+"\n\n"+t("dup.add")+"?")){ pickClose(); return; }
+  }
+  var o=addItem(v,pickSrc==="ocr"?"OCR":"QR",pickRawText);
+  pickClose();
+  if(o){
+    sessionCount++; setCount();
+    document.getElementById("lastHit").textContent="✓ "+o.value;
+    beep();
+    toast(t("t.added",o.value));
+  }
+};
+
 window.dupAnswer=function(yes){
   var p=pendingDup; pendingDup=null;
   document.getElementById("dupBox").hidden=true;
   if(!p) return;
-  if(yes) commit(p.raw,p.fmt);
+  if(yes) commit(p.raw,p.fmt,p.src);
   else toast(t("t.skipped"));
   lastAt=Date.now();
 };
@@ -1258,7 +1616,8 @@ function applyLang(){
   document.getElementById("dupBox").querySelector(".no").textContent=t("dup.skip2");
   buildSegments();
   render();
-  if(scanning) setHint("scan.hint");
+  if(!document.getElementById("scanView").hidden) buildModeSeg();
+  if(scanning) setHint(S.scanMode==="qr"?"scan.hintQr":"scan.hint");
 }
 
 /* ===================== init ===================== */
