@@ -248,6 +248,7 @@
   <button class="b b-green" data-i18n="btn.xlsx" onclick="exportXlsx()"></button>
   <button class="b b-ghost" data-i18n="btn.csv" onclick="exportCsv()"></button>
 </div>
+<button class="b b-blue" style="margin-top:9px" data-i18n="btn.mail" onclick="mailOpen()"></button>
 <div class="grid2" style="margin-top:9px">
   <button class="b b-ghost" data-i18n="btn.backup" onclick="backup()"></button>
   <button class="b b-ghost" data-i18n="btn.restore" onclick="document.getElementById('fileIn').click()"></button>
@@ -257,6 +258,30 @@
 
 <p class="tiny" id="footNote"></p>
 <div class="verbox"><span id="verLine"></span></div>
+
+<!-- ================= send by mail ================= -->
+<div class="modal" id="mailBox" hidden>
+  <div class="modal-in">
+    <h3 data-i18n="ml.title"></h3>
+    <div class="modal-sn" id="mailCount"></div>
+    <label data-i18n="ml.to"></label>
+    <input type="email" id="mailTo" data-i18n-ph="ml.toPh" autocomplete="email"
+           inputmode="email" autocapitalize="off" spellcheck="false">
+    <label style="margin-top:10px" data-i18n="ml.subj"></label>
+    <input type="text" id="mailSubj" autocomplete="off">
+    <div style="margin-top:12px">
+      <label data-i18n="ml.which"></label>
+      <div class="seg" id="segMailWho"></div>
+    </div>
+    <div style="margin-top:12px">
+      <label data-i18n="ml.as"></label>
+      <div class="seg" id="segMailWhat"></div>
+    </div>
+    <p class="note" id="mailNote"></p>
+    <button class="b b-blue" style="margin-top:11px" id="mailGo" data-i18n="ml.go" onclick="mailSend()"></button>
+    <button class="b b-ghost" style="margin-top:9px" data-i18n="pr.cancel" onclick="mailClose()"></button>
+  </div>
+</div>
 
 <!-- ================= product editor ================= -->
 <div class="modal" id="prodBox" hidden>
@@ -315,7 +340,7 @@
 (function(){
 "use strict";
 
-var APP_VER="2026-09-15a";
+var APP_VER="2026-09-16a";
 var K_LIST="sn_items_v1", K_SET="sn_settings_v1", K_LANG="sn_lang", K_PROD="sn_products_v1";
 var ZX_URL="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.2/+esm";
 var XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
@@ -323,7 +348,8 @@ var XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.j
    formats out keeps the decoder fast and stops it grabbing the wrong label */
 var FORMATS=["Code128","Code39","Code93","Codabar","EAN-13","EAN-8","UPC-A","UPC-E","ITF"];
 
-var S={ trim:0, swap:false, dup:"warn", band:0.16, beep:true, lock:false };
+var S={ trim:0, swap:false, dup:"warn", band:0.16, beep:true, lock:false,
+        mailTo:"", mailSubj:"", mailLast:0 };
 var items=[], lang="de", prodMap={};
 
 /* ===================== i18n ===================== */
@@ -368,6 +394,18 @@ var STR={ko:{
  "foot.note":"모든 데이터는 이 기기(브라우저) 안에만 저장됩니다.<br>Safari/Chrome에서 <b>홈 화면에 추가</b>하면 앱처럼 쓸 수 있습니다.<br>가끔 <b>백업(JSON)</b>을 받아두면 안전합니다.",
  "ver.label":"앱 버전",
  "upd.msg":"새 버전이 나왔습니다","upd.btn":"업데이트",
+ "btn.mail":"📧 메일로 보내기",
+ "ml.title":"메일로 보내기","ml.to":"받는 사람","ml.toPh":"name@schule.de","ml.subj":"제목",
+ "ml.which":"보낼 범위","ml.as":"보낼 형식",
+ "ml.all":"전체 {0}","ml.today":"오늘 {0}","ml.new":"새로 추가 {0}",
+ "ml.xlsx":"엑셀 첨부","ml.csv":"CSV 첨부","ml.text":"본문에 목록",
+ "ml.count":"{0}개를 보냅니다","ml.go":"메일 앱 열기",
+ "ml.subjDef":"일련번호 목록 {0}",
+ "ml.bodyHead":"일련번호 {0}개 · {1}",
+ "ml.cut":"(목록이 길어 여기까지만 담았습니다. 전체는 엑셀 첨부로 보내세요.)",
+ "ml.attachNote":"첨부 파일 {0} 은(는) 다운로드 폴더에 저장했습니다. 메일에 직접 첨부해 주세요.",
+ "ml.note":"앱이 직접 보내지 않고, <b>이 폰에 설정된 메일 앱</b>을 열어 줍니다. 첨부로 보내면 공유 시트가 열리고 거기서 <b>메일</b>을 고르면 파일이 붙습니다. 받는 사람 주소는 자동으로 복사되니 붙여넣기만 하면 됩니다. 여기 적은 주소·제목은 다음부터 자동으로 채워집니다.",
+ "t.mailCopied":"주소를 복사했습니다 · {0}",
  "pr.title":"제품 지정","pr.label":"제조사 · 제품명","pr.ph":"예: Apple iPad 10 / Epson EB-685W",
  "pr.note":"일련번호 형식으로 제조사를 자동 추정합니다. <b>?</b> 표시는 확실하지 않다는 뜻입니다. 여기서 직접 적으면 앞 4자리가 같은 일련번호는 다음부터 자동으로 같은 제품이 됩니다.",
  "pr.save":"저장","pr.auto":"자동 추정으로","pr.cancel":"닫기",
@@ -415,6 +453,18 @@ var STR={ko:{
  "foot.note":"Alle Daten bleiben ausschließlich auf diesem Gerät.<br>In Safari/Chrome über <b>Zum Home-Bildschirm</b> wie eine App nutzbar.<br>Ein gelegentliches <b>Backup (JSON)</b> schützt vor Verlust.",
  "ver.label":"App-Version",
  "upd.msg":"Neue Version verfügbar","upd.btn":"Aktualisieren",
+ "btn.mail":"📧 Per E-Mail senden",
+ "ml.title":"Per E-Mail senden","ml.to":"Empfänger","ml.toPh":"name@schule.de","ml.subj":"Betreff",
+ "ml.which":"Umfang","ml.as":"Format",
+ "ml.all":"Alle {0}","ml.today":"Heute {0}","ml.new":"Neu {0}",
+ "ml.xlsx":"Excel anhängen","ml.csv":"CSV anhängen","ml.text":"Liste im Text",
+ "ml.count":"{0} Einträge werden gesendet","ml.go":"Mail-App öffnen",
+ "ml.subjDef":"Seriennummern {0}",
+ "ml.bodyHead":"{0} Seriennummern · {1}",
+ "ml.cut":"(Liste gekürzt. Die vollständige Liste bitte als Excel-Anhang senden.)",
+ "ml.attachNote":"Die Datei {0} wurde in den Downloads gespeichert – bitte manuell anhängen.",
+ "ml.note":"Die App verschickt nichts selbst, sondern öffnet die <b>auf diesem Gerät eingerichtete Mail-App</b>. Beim Anhang erscheint das Teilen-Menü – dort <b>Mail</b> wählen, die Datei hängt dann dran. Die Empfängeradresse wird automatisch kopiert und muss nur eingefügt werden. Adresse und Betreff werden für das nächste Mal gemerkt.",
+ "t.mailCopied":"Adresse kopiert · {0}",
  "pr.title":"Gerät zuordnen","pr.label":"Hersteller · Modell","pr.ph":"z. B. Apple iPad 10 / Epson EB-685W",
  "pr.note":"Der Hersteller wird aus dem Format der Seriennummer geschätzt; ein <b>?</b> heißt: nicht sicher. Wird hier etwas eingetragen, übernehmen künftige Seriennummern mit denselben ersten vier Zeichen diesen Eintrag automatisch.",
  "pr.save":"Speichern","pr.auto":"Wieder automatisch","pr.cancel":"Schließen",
@@ -732,22 +782,44 @@ function buildSegments(){
 }
 
 /* ===================== export ===================== */
-function rows(){
-  return items.map(function(x,i){
+function rows(list){
+  return (list||items).map(function(x,i){
     return { no:i+1, sn:x.value, prod:productName(x), date:dstr(x.ts), time:tstr(x.ts),
              raw:(x.raw===x.value?"":x.raw), fmt:x.fmt||"" };
+  });
+}
+function xlHead(){
+  return [t("xl.no"),t("xl.sn"),t("xl.prod"),t("xl.date"),t("xl.time"),t("xl.raw"),t("xl.fmt")];
+}
+/* one builder per format, so the export buttons and the mail sheet cannot
+   drift apart — whatever is downloaded is exactly what gets attached */
+function csvText(list){
+  var q=function(s){ return '"'+String(s==null?"":s).replace(/"/g,'""')+'"'; };
+  var lines=["sep=;",xlHead().join(";")];
+  rows(list).forEach(function(r){
+    lines.push([r.no,q(r.sn),q(r.prod),q(r.date),q(r.time),q(r.raw),q(r.fmt)].join(";"));
+  });
+  return "﻿"+lines.join("\r\n");
+}
+function xlsxBlob(list){
+  var ready=window.XLSX?Promise.resolve():loadScript(XLSX_URL);
+  return ready.then(function(){
+    if(!window.XLSX) throw new Error("nolib");
+    var aoa=[xlHead()];
+    rows(list).forEach(function(r){ aoa.push([r.no,r.sn,r.prod,r.date,r.time,r.raw,r.fmt]); });
+    var ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"]=[{wch:6},{wch:26},{wch:18},{wch:12},{wch:10},{wch:20},{wch:12}];
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,"Seriennummern");
+    var out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+    return new Blob([out],
+      {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
   });
 }
 function stamp(){ return dstr(Date.now()); }
 window.exportCsv=function(){
   if(!items.length){ toast(t("t.noData")); return; }
-  var head=[t("xl.no"),t("xl.sn"),t("xl.prod"),t("xl.date"),t("xl.time"),t("xl.raw"),t("xl.fmt")];
-  var q=function(s){ return '"'+String(s==null?"":s).replace(/"/g,'""')+'"'; };
-  var lines=["sep=;",head.join(";")];
-  rows().forEach(function(r){
-    lines.push([r.no,q(r.sn),q(r.prod),q(r.date),q(r.time),q(r.raw),q(r.fmt)].join(";"));
-  });
-  download("Seriennummern_"+stamp()+".csv","\ufeff"+lines.join("\r\n"),"text/csv;charset=utf-8");
+  download("Seriennummern_"+stamp()+".csv",csvText(),"text/csv;charset=utf-8");
 };
 function loadScript(src){
   return new Promise(function(res,rej){
@@ -758,20 +830,121 @@ function loadScript(src){
 }
 window.exportXlsx=function(){
   if(!items.length){ toast(t("t.noData")); return; }
-  var ready=window.XLSX?Promise.resolve():loadScript(XLSX_URL);
-  ready.then(function(){
-    if(!window.XLSX) throw new Error("nolib");
-    var aoa=[[t("xl.no"),t("xl.sn"),t("xl.prod"),t("xl.date"),t("xl.time"),t("xl.raw"),t("xl.fmt")]];
-    rows().forEach(function(r){ aoa.push([r.no,r.sn,r.prod,r.date,r.time,r.raw,r.fmt]); });
-    var ws=XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"]=[{wch:6},{wch:26},{wch:18},{wch:12},{wch:10},{wch:20},{wch:12}];
-    var wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,"Seriennummern");
-    var out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
-    download("Seriennummern_"+stamp()+".xlsx",
-      new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  xlsxBlob().then(function(blob){
+    download("Seriennummern_"+stamp()+".xlsx",blob);
   }).catch(function(){ toast(t("t.xlsxErr")); });
 };
+/* ===================== send by mail =====================
+   Nothing is sent from the app itself — it hands the list to whatever mail
+   account the phone already has. Two routes, because iOS only allows one of
+   them to carry a real attachment:
+     · the share sheet (navigator.share with a file) → Mail attaches the
+       .xlsx/.csv properly, but no API may prefill the recipient;
+     · mailto: → recipient and subject are prefilled, but the list has to
+       travel as text in the body.
+   The sheet picks the first when a file is attached and falls back to the
+   second, so the user always ends up in their own Mail app. */
+function mailScope(which){
+  if(which==="today"){
+    var d=dstr(Date.now());
+    return items.filter(function(x){ return dstr(x.ts)===d; });
+  }
+  if(which==="new"){
+    var since=S.mailLast||0;
+    return items.filter(function(x){ return (x.ts||0)>since; });
+  }
+  return items.slice();
+}
+function mailBody(list){
+  var L=[t("ml.bodyHead",list.length,dstr(Date.now())),""];
+  list.forEach(function(x,i){
+    var p=productName(x);
+    L.push((i+1)+". "+x.value+(p?"  ·  "+p:"")+"  ·  "+dstr(x.ts));
+  });
+  var txt=L.join("\n");
+  /* a mailto: URL that grows past a few thousand characters is silently
+     dropped by iOS Mail, so the body is cut and the file offered instead */
+  if(txt.length>1700){
+    txt=txt.slice(0,1700).replace(/\n[^\n]*$/,"")+"\n\n"+t("ml.cut");
+  }
+  return txt+"\n";
+}
+window.mailOpen=function(){
+  if(!items.length){ toast(t("t.noData")); return; }
+  document.getElementById("mailTo").value=S.mailTo||"";
+  document.getElementById("mailSubj").value=S.mailSubj||t("ml.subjDef",dstr(Date.now()));
+  buildMailSegments();
+  document.getElementById("mailBox").hidden=false;
+  document.body.classList.add("editing");
+};
+window.mailClose=function(){
+  document.getElementById("mailBox").hidden=true;
+  document.body.classList.remove("editing");
+};
+var mailWhat="xlsx", mailWho="all";
+function buildMailSegments(){
+  segment("segMailWho",[
+    {v:"all",label:t("ml.all",items.length)},
+    {v:"today",label:t("ml.today",mailScope("today").length)},
+    {v:"new",label:t("ml.new",mailScope("new").length)}
+  ],mailWho,function(v){ mailWho=v; buildMailSegments(); });
+  segment("segMailWhat",[
+    {v:"xlsx",label:t("ml.xlsx")},{v:"csv",label:t("ml.csv")},{v:"text",label:t("ml.text")}
+  ],mailWhat,function(v){ mailWhat=v; buildMailSegments(); });
+  var n=mailScope(mailWho).length;
+  document.getElementById("mailCount").textContent=t("ml.count",n);
+  document.getElementById("mailGo").disabled=!n;
+  document.getElementById("mailGo").style.opacity=n?"1":".45";
+}
+function mailtoGo(to,subj,body){
+  var u="mailto:"+encodeURIComponent(to||"")+
+        "?subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body);
+  location.href=u;
+}
+window.mailSend=function(){
+  var to=document.getElementById("mailTo").value.trim();
+  var subj=document.getElementById("mailSubj").value.trim()||t("ml.subjDef",dstr(Date.now()));
+  var list=mailScope(mailWho);
+  if(!list.length){ toast(t("t.noData")); return; }
+  /* whatever is typed here becomes the default for next time */
+  S.mailTo=to; S.mailSubj=subj; saveSet();
+
+  var done=function(){
+    S.mailLast=Date.now(); saveSet();
+    buildMailSegments();
+    mailClose();
+  };
+  if(mailWhat==="text"){
+    mailtoGo(to,subj,mailBody(list));
+    done();
+    return;
+  }
+  var name="Seriennummern_"+stamp()+(mailWhat==="csv"?".csv":".xlsx");
+  var made=(mailWhat==="csv")
+    ? Promise.resolve(new Blob([csvText(list)],{type:"text/csv;charset=utf-8"}))
+    : xlsxBlob(list);
+  made.then(function(blob){
+    var file=null;
+    try{ file=new File([blob],name,{type:blob.type}); }catch(e){}
+    if(file&&navigator.canShare&&navigator.canShare({files:[file]})&&navigator.share){
+      /* the share sheet cannot carry the address, so put it on the clipboard
+         — one paste in the To: field and the mail is ready */
+      var after=function(){
+        return navigator.share({files:[file],title:subj,text:subj})
+          .then(done,function(){ /* user cancelled: leave the sheet as it was */ });
+      };
+      if(to&&navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(to).then(function(){ toast(t("t.mailCopied",to)); },function(){});
+      }
+      return after();
+    }
+    /* no file sharing here: send the list as text and offer the file too */
+    download(name,blob);
+    mailtoGo(to,subj,mailBody(list)+"\n"+t("ml.attachNote",name));
+    done();
+  }).catch(function(){ toast(t("t.xlsxErr")); });
+};
+
 window.backup=function(){
   download("Scanner_Backup_"+stamp()+".json",
     JSON.stringify({v:2,app:"sn-scanner",exported:new Date().toISOString(),
@@ -1078,6 +1251,8 @@ function applyLang(){
   });
   document.getElementById("footNote").innerHTML=t("foot.note");
   document.getElementById("prodNote").innerHTML=t("pr.note");
+  document.getElementById("mailNote").innerHTML=t("ml.note");
+  if(!document.getElementById("mailBox").hidden) buildMailSegments();
   document.getElementById("verLine").textContent=t("ver.label")+" v"+APP_VER;
   document.getElementById("dupBox").querySelector(".yes").textContent=t("dup.add");
   document.getElementById("dupBox").querySelector(".no").textContent=t("dup.skip2");
