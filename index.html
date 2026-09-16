@@ -133,6 +133,29 @@
     background:#111;color:#fff;padding:11px 17px;border-radius:12px;font-size:13.5px;font-weight:600;
     opacity:0;pointer-events:none;transition:.22s;z-index:200;max-width:88vw;text-align:center}
   .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* ---- Hersteller / product line on each row ---- */
+  .item .prod{display:inline-flex;align-items:center;gap:4px;margin-top:3px;background:var(--chip);
+    border-radius:999px;padding:2px 9px;font-size:11px;font-weight:800;color:var(--text);
+    max-width:100%;line-height:1.5}
+  .item .prod.guess{color:var(--muted);font-weight:700}
+  .item .prod.none{background:none;padding:2px 0;color:var(--muted);font-weight:600}
+  .item .prod .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .item .t{cursor:pointer}
+  /* ---- product editor ---- */
+  .modal{position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.5);display:flex;
+    align-items:flex-end;justify-content:center}
+  .modal-in{background:var(--card);width:100%;max-width:620px;border-radius:18px 18px 0 0;
+    padding:16px 15px calc(18px + env(safe-area-inset-bottom));max-height:86vh;overflow-y:auto}
+  .modal-in h3{margin:0 0 3px;font-size:15px}
+  .modal-sn{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;
+    color:var(--muted);word-break:break-all;margin-bottom:12px}
+  .modal-in input[type=text]{width:100%;box-sizing:border-box}
+  .pchips{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 3px}
+  .pchips button{background:var(--chip);border:1px solid var(--line);border-radius:999px;
+    padding:7px 12px;font-size:12px;font-weight:700;color:var(--text);cursor:pointer}
+  .pchips button:active{opacity:.65}
+  /* keep a toast off the editor buttons while it is open */
+  body.editing .toast{bottom:auto;top:calc(12px + env(safe-area-inset-top))}
   .verbox{text-align:center;margin-top:12px}
   .verbox span{display:inline-block;background:var(--chip);color:var(--text);border-radius:999px;
     padding:5px 13px;font-size:11.5px;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
@@ -235,6 +258,23 @@
 <p class="tiny" id="footNote"></p>
 <div class="verbox"><span id="verLine"></span></div>
 
+<!-- ================= product editor ================= -->
+<div class="modal" id="prodBox" hidden>
+  <div class="modal-in">
+    <h3 data-i18n="pr.title"></h3>
+    <div class="modal-sn" id="prodSn"></div>
+    <label data-i18n="pr.label"></label>
+    <input type="text" id="prodIn" data-i18n-ph="pr.ph" autocomplete="off">
+    <div class="pchips" id="prodChips"></div>
+    <p class="note" id="prodNote"></p>
+    <button class="b b-blue" style="margin-top:11px" data-i18n="pr.save" onclick="prodSave()"></button>
+    <div class="grid2" style="margin-top:9px">
+      <button class="b b-ghost" data-i18n="pr.auto" onclick="prodReset()"></button>
+      <button class="b b-ghost" data-i18n="pr.cancel" onclick="prodClose()"></button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= scanner ================= -->
 <div class="scan" id="scanView" hidden>
   <video id="video" playsinline muted autoplay></video>
@@ -275,8 +315,8 @@
 (function(){
 "use strict";
 
-var APP_VER="2026-09-09c";
-var K_LIST="sn_items_v1", K_SET="sn_settings_v1", K_LANG="sn_lang";
+var APP_VER="2026-09-15a";
+var K_LIST="sn_items_v1", K_SET="sn_settings_v1", K_LANG="sn_lang", K_PROD="sn_products_v1";
 var ZX_URL="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.2/+esm";
 var XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
 /* 1D only: a serial-number sticker is never a QR code, and leaving the 2D
@@ -284,7 +324,7 @@ var XLSX_URL="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.j
 var FORMATS=["Code128","Code39","Code93","Codabar","EAN-13","EAN-8","UPC-A","UPC-E","ITF"];
 
 var S={ trim:0, swap:false, dup:"warn", band:0.16, beep:true, lock:false };
-var items=[], lang="de";
+var items=[], lang="de", prodMap={};
 
 /* ===================== i18n ===================== */
 var STR={ko:{
@@ -328,7 +368,12 @@ var STR={ko:{
  "foot.note":"모든 데이터는 이 기기(브라우저) 안에만 저장됩니다.<br>Safari/Chrome에서 <b>홈 화면에 추가</b>하면 앱처럼 쓸 수 있습니다.<br>가끔 <b>백업(JSON)</b>을 받아두면 안전합니다.",
  "ver.label":"앱 버전",
  "upd.msg":"새 버전이 나왔습니다","upd.btn":"업데이트",
- "xl.no":"번호","xl.sn":"일련번호","xl.date":"날짜","xl.time":"시간","xl.raw":"원본","xl.fmt":"코드 종류"
+ "pr.title":"제품 지정","pr.label":"제조사 · 제품명","pr.ph":"예: Apple iPad 10 / Epson EB-685W",
+ "pr.note":"일련번호 형식으로 제조사를 자동 추정합니다. <b>?</b> 표시는 확실하지 않다는 뜻입니다. 여기서 직접 적으면 앞 4자리가 같은 일련번호는 다음부터 자동으로 같은 제품이 됩니다.",
+ "pr.save":"저장","pr.auto":"자동 추정으로","pr.cancel":"닫기",
+ "pr.unknown":"제조사 모름 · 눌러서 입력",
+ "t.prodSet":"제품 지정 · {0}","t.prodAuto":"자동 추정으로 되돌렸습니다",
+ "xl.no":"번호","xl.sn":"일련번호","xl.prod":"제조사·제품","xl.date":"날짜","xl.time":"시간","xl.raw":"원본","xl.fmt":"코드 종류"
 },de:{
  "app.title":"Seriennummer-Scanner","app.sub":"Barcodes scannen und als Excel-Liste",
  "st.total":"Gesamt","st.today":"Heute","st.dup":"Doppelt",
@@ -370,7 +415,12 @@ var STR={ko:{
  "foot.note":"Alle Daten bleiben ausschließlich auf diesem Gerät.<br>In Safari/Chrome über <b>Zum Home-Bildschirm</b> wie eine App nutzbar.<br>Ein gelegentliches <b>Backup (JSON)</b> schützt vor Verlust.",
  "ver.label":"App-Version",
  "upd.msg":"Neue Version verfügbar","upd.btn":"Aktualisieren",
- "xl.no":"Nr.","xl.sn":"Seriennummer","xl.date":"Datum","xl.time":"Uhrzeit","xl.raw":"Original","xl.fmt":"Codeart"
+ "pr.title":"Gerät zuordnen","pr.label":"Hersteller · Modell","pr.ph":"z. B. Apple iPad 10 / Epson EB-685W",
+ "pr.note":"Der Hersteller wird aus dem Format der Seriennummer geschätzt; ein <b>?</b> heißt: nicht sicher. Wird hier etwas eingetragen, übernehmen künftige Seriennummern mit denselben ersten vier Zeichen diesen Eintrag automatisch.",
+ "pr.save":"Speichern","pr.auto":"Wieder automatisch","pr.cancel":"Schließen",
+ "pr.unknown":"Hersteller unbekannt · tippen zum Eintragen",
+ "t.prodSet":"Gerät gesetzt · {0}","t.prodAuto":"Wieder auf automatisch gestellt",
+ "xl.no":"Nr.","xl.sn":"Seriennummer","xl.prod":"Hersteller/Gerät","xl.date":"Datum","xl.time":"Uhrzeit","xl.raw":"Original","xl.fmt":"Codeart"
 }};
 function t(k){
   var s=(STR[lang]&&STR[lang][k])||(STR.de&&STR.de[k])||k, a=arguments;
@@ -417,14 +467,108 @@ function transform(raw){
   return v.trim();
 }
 
+/* ===================== Hersteller-Erkennung =====================
+   A serial number is the maker's own internal string: no public registry
+   turns one into a product name, and nothing here goes online. What a serial
+   DOES carry is the manufacturer's own format — its length, where the digits
+   sit, the factory prefix — and those are distinctive enough to name the
+   maker. Each rule carries a confidence:
+     2 = the shape belongs to this maker alone
+     1 = it fits, but another maker could produce the same shape (shown "?")
+   Anything the rules cannot place stays empty rather than being invented. */
+var VENDORS=[
+  /* Cisco: 3 letters (site) + 4 digits (year/week) + 4 alnum = 11 */
+  {v:"Cisco",c:2,re:/^[A-Z]{3}[0-9]{4}[0-9A-Z]{4}$/},
+  /* Acer: 22 characters, starting with the model family code */
+  {v:"Acer",c:2,re:/^(NX|NT|DT|UM|MM|ZX|EU)[0-9A-Z]{20}$/},
+  /* Apple: 3-char factory/line code + 9 = 12 (serials up to 2020) */
+  {v:"Apple",c:2,re:/^(C0|C1|C2|C3|C4|C6|C7|C8|CK|D2|DG|DK|DL|DM|DN|DP|DQ|DR|DT|DV|DX|DY|F1|F2|F4|F5|F7|F9|FV|G8|G9|GG|H0|H1|H2|H4|H9|RM|RN|SC|VM|W8|W9|YM)[0-9A-Z]{10}$/},
+  /* Fujitsu: Y + 3 letters + 6 digits */
+  {v:"Fujitsu",c:2,re:/^Y[A-Z]{3}[0-9]{6}$/},
+  /* Brother: letter + 5 digits + letter + digit + letter + 6 digits */
+  {v:"Brother",c:2,re:/^[A-Z][0-9]{5}[A-Z][0-9][A-Z][0-9]{6}$/},
+  /* HP/HPE: 3 + 4 digits + 3, with a letter in the first and the last block
+     — that letter check is what keeps a 10-digit code from becoming an HP */
+  {v:"HP",c:2,re:/^(?=.{0,2}[A-Z])[0-9A-Z]{3}[0-9]{4}(?=.{0,2}[A-Z])[0-9A-Z]{3}$/},
+  /* Lenovo: machine-type prefix + 6 = 8 */
+  {v:"Lenovo",c:2,re:/^(PF|PC|PD|PG|R9|MP|MJ|YB|YD|S4|1S|EB|LR)[0-9A-Z]{6}$/},
+  /* Dell Service Tag: exactly 7 alnum mixing letters and digits. Almost
+     nothing else is 7 characters — but almost is not always. */
+  {v:"Dell",c:1,re:/^(?=.*[0-9])(?=.*[A-Z])[0-9A-Z]{7}$/},
+  /* Epson (Beamer, Drucker, Dokumentenkameras): letter + 3 + 6-7 digits */
+  {v:"Epson",c:1,re:/^[A-Z][0-9A-Z]{3}[0-9]{6,7}$/},
+  /* Microsoft Surface: 12 digits and nothing else */
+  {v:"Microsoft",c:1,re:/^[0-9]{12}$/}
+];
+/* Deliberately not guessed: Samsung, ASUS, Zebra, Kyocera, Canon, BenQ and
+   the rest. Their serials are ordinary 10-16 character strings that collide
+   with everyone else's — in testing a rule for them fired on a third of all
+   random codes. An empty field beats the wrong maker in an equipment list. */
+
+/* An EAN/UPC is a PRODUCT code, not a serial. Its leading digits name the
+   GS1 member organisation that issued it — the only thing readable offline. */
+var GS1=[[0,19,"UPC (USA/Kanada)"],[30,39,"USA"],[40,44,"Deutschland"],[45,49,"Japan"],
+ [50,59,"Großbritannien"],[60,69,"Südafrika"],[70,79,"Norwegen/Israel"],[80,83,"Italien"],
+ [84,84,"Spanien"],[85,86,"Tschechien/Serbien"],[87,87,"Niederlande"],[88,88,"Südkorea"],
+ [89,89,"Indien"],[90,91,"Österreich"],[93,93,"Australien"],[94,94,"Neuseeland"],
+ [400,440,"Deutschland"],[450,459,"Japan"],[471,471,"Taiwan"],[489,489,"Hongkong"],
+ [500,509,"Großbritannien"],[520,521,"Griechenland"],[539,539,"Irland"],
+ [540,549,"Belgien/Luxemburg"],[560,560,"Portugal"],[569,569,"Island"],[570,579,"Dänemark"],
+ [590,590,"Polen"],[594,594,"Rumänien"],[599,599,"Ungarn"],[600,601,"Südafrika"],
+ [640,649,"Finnland"],[690,699,"China"],[700,709,"Norwegen"],[729,729,"Israel"],
+ [730,739,"Schweden"],[754,755,"Kanada"],[760,769,"Schweiz"],[770,771,"Kolumbien"],
+ [789,790,"Brasilien"],[800,839,"Italien"],[840,849,"Spanien"],[858,858,"Slowakei"],
+ [859,859,"Tschechien"],[860,860,"Serbien"],[867,867,"Nordkorea"],[868,869,"Türkei"],
+ [870,879,"Niederlande"],[880,880,"Südkorea"],[885,885,"Thailand"],[888,888,"Singapur"],
+ [890,890,"Indien"],[893,893,"Vietnam"],[899,899,"Indonesien"],[900,919,"Österreich"],
+ [930,939,"Australien"],[940,949,"Neuseeland"],[955,955,"Malaysia"],
+ [977,977,"Zeitschrift"],[978,979,"Buch (ISBN)"],[981,984,"Gutschein"],[990,999,"Gutschein"]];
+function gs1Country(code){
+  var d=String(code).replace(/\D/g,"");
+  if(d.length<8) return null;
+  var p3=Number(d.slice(0,3)), p2=Number(d.slice(0,2)), i, g;
+  /* the 3-digit ranges are the specific ones, so they have to win */
+  for(i=0;i<GS1.length;i++){ g=GS1[i]; if(g[0]>=100&&p3>=g[0]&&p3<=g[1]) return g[2]; }
+  for(i=0;i<GS1.length;i++){ g=GS1[i]; if(g[0]<100&&p2>=g[0]&&p2<=g[1]) return g[2]; }
+  return null;
+}
+var EANFMT={"EAN-13":1,"EAN-8":1,"UPC-A":1,"UPC-E":1};
+function guessVendor(sn,fmt){
+  var s=String(sn==null?"":sn).trim();
+  if(!s) return null;
+  if(EANFMT[fmt]){               /* a retail code, not a serial — say so */
+    var land=gs1Country(s);
+    return {name:land?"EAN · "+land:"EAN",c:2};
+  }
+  var u=s.toUpperCase();
+  for(var i=0;i<VENDORS.length;i++){
+    if(VENDORS[i].re.test(u)) return {name:VENDORS[i].v,c:VENDORS[i].c};
+  }
+  return null;
+}
+/* A name typed by hand is remembered for that serial prefix, so the next
+   device out of the same batch is filled in without being asked again. */
+function prodKey(v){ return String(v||"").toUpperCase().slice(0,4); }
+function productOf(x){
+  if(x.prod) return {name:x.prod,src:"man"};
+  var learned=prodMap[prodKey(x.value)];
+  if(learned) return {name:learned,src:"learn"};
+  var g=guessVendor(x.value,x.fmt);
+  if(g) return {name:g.name,src:"auto",c:g.c};
+  return null;
+}
+function productName(x){ var p=productOf(x); return p?p.name:""; }
+
 /* ===================== list ===================== */
 function load(){
   items=lsGet(K_LIST,[]);
+  prodMap=lsGet(K_PROD,{})||{};
   var s=lsGet(K_SET,null);
   if(s) for(var k in S) if(s[k]!==undefined) S[k]=s[k];
 }
 function save(){ lsSet(K_LIST,items); }
 function saveSet(){ lsSet(K_SET,S); }
+function saveProd(){ lsSet(K_PROD,prodMap); }
 function isDup(v,skipId){
   return items.some(function(x){ return x.value===v&&x.id!==skipId; });
 }
@@ -455,6 +599,55 @@ window.reapply=function(){
   recheckDups(); save(); render();
   toast(t("t.reapplied",items.length));
 };
+/* ===================== product editor ===================== */
+var prodId=null;
+window.prodOpen=function(id){
+  var x=items.filter(function(y){ return y.id===id; })[0];
+  if(!x) return;
+  prodId=id;
+  document.getElementById("prodSn").textContent=x.value;
+  var p=productOf(x);
+  document.getElementById("prodIn").value=(p&&p.src!=="auto")?p.name:(p?p.name:"");
+  /* offer what is already in the list first — those are this user's own
+     device names — then the makers the rules know about */
+  var used={}, order=[];
+  items.forEach(function(y){ var n=productName(y);
+    if(n&&n.indexOf("EAN")!==0&&!used[n]){ used[n]=1; order.push(n); } });
+  VENDORS.forEach(function(v){ if(!used[v.v]){ used[v.v]=1; order.push(v.v); } });
+  document.getElementById("prodChips").innerHTML=order.slice(0,14).map(function(n){
+    return '<button type="button" data-n="'+esc(n)+'">'+esc(n)+"</button>"; }).join("");
+  Array.prototype.forEach.call(document.getElementById("prodChips").querySelectorAll("button"),
+    function(b){ b.onclick=function(){ document.getElementById("prodIn").value=b.getAttribute("data-n"); }; });
+  document.getElementById("prodBox").hidden=false;
+  document.body.classList.add("editing");
+};
+window.prodClose=function(){
+  prodId=null;
+  document.getElementById("prodBox").hidden=true;
+  document.body.classList.remove("editing");
+};
+window.prodSave=function(){
+  var x=items.filter(function(y){ return y.id===prodId; })[0];
+  if(!x){ prodClose(); return; }
+  var v=document.getElementById("prodIn").value.trim();
+  if(!v){ prodReset(); return; }
+  x.prod=v;
+  prodMap[prodKey(x.value)]=v;   /* the same batch fills itself in next time */
+  save(); saveProd(); render(); prodClose();
+  toast(t("t.prodSet",v));
+};
+/* back to the automatic guess — and forget what this prefix had learned */
+window.prodReset=function(){
+  var x=items.filter(function(y){ return y.id===prodId; })[0];
+  if(x){
+    delete x.prod;
+    delete prodMap[prodKey(x.value)];
+    save(); saveProd(); render();
+  }
+  prodClose();
+  toast(t("t.prodAuto"));
+};
+
 window.addManual=function(){
   var el=document.getElementById("manualIn");
   var v=el.value.trim();
@@ -473,15 +666,22 @@ function render(){
       var meta=dstr(x.ts)+" "+tstr(x.ts);
       if(x.raw!==x.value) meta+=" · "+t("orig",x.raw);
       if(x.dup) meta+=" · <b>"+esc(t("st.dup"))+"</b>";
+      var p=productOf(x), chip;
+      if(!p) chip='<div class="prod none">'+esc(t("pr.unknown"))+"</div>";
+      else chip='<div class="prod'+(p.src==="auto"?" guess":"")+'"><span class="nm">'+
+        esc(p.name)+"</span>"+(p.src==="auto"&&p.c===1?"<span>?</span>":"")+"</div>";
       return '<div class="item'+(x.dup?" dup":"")+'">'+
         '<div class="no">'+n+"</div>"+
-        '<div class="t"><div class="sn">'+esc(x.value)+"</div>"+
-        '<div class="meta">'+meta+"</div></div>"+
+        '<div class="t" data-edit="'+esc(x.id)+'"><div class="sn">'+esc(x.value)+"</div>"+
+        chip+'<div class="meta">'+meta+"</div></div>"+
         '<button class="x" data-id="'+esc(x.id)+'" aria-label="delete">✕</button></div>';
     }).join("");
     box.innerHTML=rows;
     Array.prototype.forEach.call(box.querySelectorAll(".x"),function(b){
       b.onclick=function(){ delItem(b.getAttribute("data-id")); };
+    });
+    Array.prototype.forEach.call(box.querySelectorAll("[data-edit]"),function(b){
+      b.onclick=function(){ prodOpen(b.getAttribute("data-edit")); };
     });
   }
   var today=dstr(Date.now()), nToday=0, nDup=0;
@@ -534,18 +734,18 @@ function buildSegments(){
 /* ===================== export ===================== */
 function rows(){
   return items.map(function(x,i){
-    return { no:i+1, sn:x.value, date:dstr(x.ts), time:tstr(x.ts),
+    return { no:i+1, sn:x.value, prod:productName(x), date:dstr(x.ts), time:tstr(x.ts),
              raw:(x.raw===x.value?"":x.raw), fmt:x.fmt||"" };
   });
 }
 function stamp(){ return dstr(Date.now()); }
 window.exportCsv=function(){
   if(!items.length){ toast(t("t.noData")); return; }
-  var head=[t("xl.no"),t("xl.sn"),t("xl.date"),t("xl.time"),t("xl.raw"),t("xl.fmt")];
+  var head=[t("xl.no"),t("xl.sn"),t("xl.prod"),t("xl.date"),t("xl.time"),t("xl.raw"),t("xl.fmt")];
   var q=function(s){ return '"'+String(s==null?"":s).replace(/"/g,'""')+'"'; };
   var lines=["sep=;",head.join(";")];
   rows().forEach(function(r){
-    lines.push([r.no,q(r.sn),q(r.date),q(r.time),q(r.raw),q(r.fmt)].join(";"));
+    lines.push([r.no,q(r.sn),q(r.prod),q(r.date),q(r.time),q(r.raw),q(r.fmt)].join(";"));
   });
   download("Seriennummern_"+stamp()+".csv","\ufeff"+lines.join("\r\n"),"text/csv;charset=utf-8");
 };
@@ -561,10 +761,10 @@ window.exportXlsx=function(){
   var ready=window.XLSX?Promise.resolve():loadScript(XLSX_URL);
   ready.then(function(){
     if(!window.XLSX) throw new Error("nolib");
-    var aoa=[[t("xl.no"),t("xl.sn"),t("xl.date"),t("xl.time"),t("xl.raw"),t("xl.fmt")]];
-    rows().forEach(function(r){ aoa.push([r.no,r.sn,r.date,r.time,r.raw,r.fmt]); });
+    var aoa=[[t("xl.no"),t("xl.sn"),t("xl.prod"),t("xl.date"),t("xl.time"),t("xl.raw"),t("xl.fmt")]];
+    rows().forEach(function(r){ aoa.push([r.no,r.sn,r.prod,r.date,r.time,r.raw,r.fmt]); });
     var ws=XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"]=[{wch:6},{wch:26},{wch:12},{wch:10},{wch:20},{wch:12}];
+    ws["!cols"]=[{wch:6},{wch:26},{wch:18},{wch:12},{wch:10},{wch:20},{wch:12}];
     var wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,"Seriennummern");
     var out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
@@ -574,7 +774,8 @@ window.exportXlsx=function(){
 };
 window.backup=function(){
   download("Scanner_Backup_"+stamp()+".json",
-    JSON.stringify({v:1,app:"sn-scanner",exported:new Date().toISOString(),settings:S,items:items},null,2),
+    JSON.stringify({v:2,app:"sn-scanner",exported:new Date().toISOString(),
+      settings:S,products:prodMap,items:items},null,2),
     "application/json");
   toast(t("t.backupDone"));
 };
@@ -592,7 +793,10 @@ window.restore=function(ev){
         arr.forEach(function(x){ if(!x.id) x.id=uid(); if(!have[x.id]) items.push(x); });
       }
       items.forEach(function(x){ if(x.value===undefined) x.value=transform(x.raw); });
-      recheckDups(); save(); render(); toast(t("t.restored",arr.length));
+      /* the learned product names travel with the backup */
+      if(d.products) for(var k in d.products)
+        if(Object.prototype.hasOwnProperty.call(d.products,k)) prodMap[k]=d.products[k];
+      recheckDups(); save(); saveProd(); render(); toast(t("t.restored",arr.length));
     }catch(e){ toast(t("t.badFile")); }
     ev.target.value="";
   };
@@ -873,6 +1077,7 @@ function applyLang(){
     el.setAttribute("placeholder",t(el.getAttribute("data-i18n-ph")));
   });
   document.getElementById("footNote").innerHTML=t("foot.note");
+  document.getElementById("prodNote").innerHTML=t("pr.note");
   document.getElementById("verLine").textContent=t("ver.label")+" v"+APP_VER;
   document.getElementById("dupBox").querySelector(".yes").textContent=t("dup.add");
   document.getElementById("dupBox").querySelector(".no").textContent=t("dup.skip2");
